@@ -35,8 +35,49 @@ jobs:
       - name: Run tests
         run: swift test
 
-      - name: Build DMG (unsigned)
-        run: ./Tools/build_dmg.sh
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "${MACOS_CERTIFICATE_P12_BASE64}" ]; then
+            echo "MACOS_CERTIFICATE_P12_BASE64 not set — release will be unsigned."
+            echo "SIGNED=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer_id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          echo -n "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNED=1" >> "$GITHUB_ENV"
+
+      - name: Build DMG (signed + notarized when secrets present)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "${SIGNED:-0}" = "1" ] && [ -n "${APPLE_ID}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD}" ]; then
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            ./Tools/build_dmg.sh --sign --notarize
+          else
+            echo "Building unsigned DMG (missing signing/notarization secrets)."
+            ./Tools/build_dmg.sh
+          fi
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4

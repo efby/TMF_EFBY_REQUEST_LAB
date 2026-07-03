@@ -53,13 +53,43 @@ Script: [`Tools/build_dmg.sh`](../../Tools/build_dmg.sh)
 
 ## Firma y notarización (producción)
 
-Requisitos locales (no en CI por defecto):
+Para que el DMG se abra en cualquier Mac **sin** “App dañada / no se puede verificar”, hace falta:
 
-- Certificado **Developer ID Application**
-- Perfil notarización `xcrun notarytool store-credentials`
-- Team ID configurado en `build_dmg.sh`
+1. Firma con certificado **Developer ID Application**
+2. Notarización con Apple (`notarytool`)
+3. Stapling del ticket en la app y en el DMG
 
-El workflow de release en CI genera DMG **sin firma** como artefacto descargable. Para distribución firmada, ejecutar localmente con `--sign --notarize` y subir manualmente o configurar secrets en GitHub.
+### Local
+
+```bash
+# Una vez: guardar credenciales de notarización en el llavero
+xcrun notarytool store-credentials efby-requestlabs-notary \
+  --apple-id "tu@email.com" \
+  --team-id FYU5QTGXLB \
+  --password "app-specific-password"
+
+./Tools/build_dmg.sh --sign --notarize
+```
+
+### GitHub Actions (Release)
+
+El workflow `.github/workflows/release.yml` firma y notariza automáticamente si existen estos **secrets** del repositorio:
+
+| Secret | Descripción |
+|--------|-------------|
+| `MACOS_CERTIFICATE_P12_BASE64` | Certificado Developer ID Application exportado como `.p12`, en Base64 |
+| `MACOS_CERTIFICATE_PASSWORD` | Contraseña del `.p12` |
+| `APPLE_ID` | Apple ID del equipo |
+| `APPLE_APP_SPECIFIC_PASSWORD` | Contraseña de app (appleid.apple.com → Seguridad) |
+| `APPLE_TEAM_ID` | Team ID (ej. `FYU5QTGXLB`) |
+
+Exportar el certificado a Base64 (en Mac local):
+
+```bash
+base64 -i DeveloperID.p12 | pbcopy
+```
+
+Si faltan secrets, el release publica un DMG **sin firma** (solo para pruebas).
 
 ## GitHub Releases
 

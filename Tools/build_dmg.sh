@@ -16,11 +16,26 @@ SOURCE_LOGO_PREVIEW="$DIST_DIR/logo_source_preview.png"
 ICON_PNG="$RESOURCES_DIR/AppIcon.png"
 ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
 ICON_ICNS="$RESOURCES_DIR/AppIcon.icns"
-TEAM_ID="FYU5QTGXLB"
-DEVELOPER_ID_APP="Developer ID Application: EFBY SERVICIOS INFORMATICOS LIMITADA ($TEAM_ID)"
-NOTARY_PROFILE="efby-requestlabs-notary"
+TEAM_ID="${APPLE_TEAM_ID:-FYU5QTGXLB}"
+DEVELOPER_ID_APP="${DEVELOPER_ID_APP:-Developer ID Application: EFBY SERVICIOS INFORMATICOS LIMITADA ($TEAM_ID)}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-efby-requestlabs-notary}"
 ENABLE_SIGNING=0
 ENABLE_NOTARIZATION=0
+
+submit_for_notarization() {
+  local artifact="$1"
+  if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${TEAM_ID:-}" ]]; then
+    echo "Submitting $(basename "$artifact") to Apple notarization (Apple ID credentials)…"
+    xcrun notarytool submit "$artifact" \
+      --apple-id "$APPLE_ID" \
+      --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+      --team-id "$TEAM_ID" \
+      --wait
+  else
+    echo "Submitting $(basename "$artifact") to Apple notarization (keychain profile: $NOTARY_PROFILE)…"
+    xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -148,12 +163,14 @@ for RESOURCE_BUNDLE in "$ROOT_DIR"/.build/apple/Products/Release/*.bundle; do
 done
 
 if [[ "$ENABLE_SIGNING" -eq 1 ]]; then
+  echo "Signing app with: $DEVELOPER_ID_APP"
   codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID_APP" "$APP_DIR"
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
 
 if [[ "$ENABLE_NOTARIZATION" -eq 1 ]]; then
   ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
-  xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+  submit_for_notarization "$ZIP_PATH"
   xcrun stapler staple "$APP_DIR"
   codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
@@ -165,11 +182,12 @@ ln -sfn /Applications "$DMG_ROOT/Applications"
 hdiutil create -volname "EFBY Request Lab" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
 
 if [[ "$ENABLE_SIGNING" -eq 1 ]]; then
-  echo "Skipping DMG codesign; notarization ticket will be attached to the DMG itself."
+  echo "Signing DMG with: $DEVELOPER_ID_APP"
+  codesign --force --timestamp --sign "$DEVELOPER_ID_APP" "$DMG_PATH"
 fi
 
 if [[ "$ENABLE_NOTARIZATION" -eq 1 ]]; then
-  xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+  submit_for_notarization "$DMG_PATH"
   xcrun stapler staple "$DMG_PATH"
   xcrun stapler validate "$DMG_PATH"
 fi
