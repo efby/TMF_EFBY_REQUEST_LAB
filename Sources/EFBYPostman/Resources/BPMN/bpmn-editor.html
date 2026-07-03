@@ -1,0 +1,566 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BPMN Flow Editor</title>
+  <link rel="stylesheet" href="./assets/diagram-js.css">
+  <link rel="stylesheet" href="./assets/bpmn-js.css">
+  <link rel="stylesheet" href="./assets/bpmn-font/css/bpmn-embedded.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #232323;
+      color: #f2f2f2;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .djs-parent,
+    .bjs-container {
+      --canvas-fill-color: #1f2329;
+      --palette-background-color: rgba(22, 24, 29, 0.98);
+      --palette-border-color: rgba(255, 255, 255, 0.1);
+      --palette-entry-color: #dce6f2;
+      --palette-entry-hover-color: #8ec5ff;
+      --palette-entry-selected-color: #65b3ff;
+      --context-pad-entry-background-color: #20252c;
+      --context-pad-entry-hover-background-color: #2a313a;
+      --popup-background-color: rgba(28, 31, 36, 0.98);
+      --popup-border-color: rgba(255, 255, 255, 0.08);
+      --popup-entry-title-color: #e5edf7;
+      --popup-description-color: #9caec4;
+      --popup-search-border-color: rgba(255, 255, 255, 0.12);
+      --popup-search-focus-background-color: #ffffff;
+      --popup-search-focus-border-color: #65b3ff;
+      /* Replace / “Change element” list: selection + search matches (default was light grey on dark UI) */
+      --popup-entry-hover-color: rgba(101, 179, 255, 0.32);
+      --search-result-hover-background-color: rgba(101, 179, 255, 0.28);
+      --search-preselected-background-color: rgba(101, 179, 255, 0.4);
+      /* Drag desde paleta / conexión: diagram-js pintaba el SVG y shapes con gris casi blanco */
+      --shape-drop-allowed-fill-color: #1f2329;
+      --shape-drop-not-allowed-fill-color: #3a2428;
+      --shape-connect-allowed-fill-color: #1f2329;
+      --bendpoint-fill-color: #65b3ff;
+      --bendpoint-stroke-color: #0f1218;
+    }
+
+    /*
+     * Layout: paleta fuera del contenedor del diagrama (flex). Evita padding-top en .djs-container,
+     * que en WKWebView desplazaba el cursor respecto a flechas, bendpoints y reconexión.
+     */
+    #app {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.05), transparent 45%),
+        linear-gradient(180deg, #2c2c2c 0%, #222222 100%);
+    }
+
+    #flow-palette-anchor {
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: 0;
+      z-index: 80;
+    }
+
+    #canvas {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+      position: relative;
+    }
+
+    .djs-container.djs-parent {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+    }
+
+    .djs-container.djs-parent > .djs-overlay-container {
+      top: 0 !important;
+      left: 0 !important;
+    }
+
+    .djs-palette {
+      position: relative !important;
+      left: auto !important;
+      top: auto !important;
+      right: auto !important;
+      width: 100% !important;
+      max-width: 100%;
+      box-sizing: border-box;
+      margin: 0 !important;
+      z-index: 70;
+      background: rgba(26, 26, 26, 0.96) !important;
+      border: none !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      box-shadow: none;
+      border-radius: 0;
+    }
+
+    .djs-palette.two-column.open {
+      width: 100% !important;
+    }
+
+    .djs-palette .djs-palette-toggle {
+      display: none !important;
+    }
+
+    .djs-palette:not(.open) {
+      overflow: visible !important;
+    }
+
+    .djs-palette:not(.open) .djs-palette-entries {
+      display: flex !important;
+    }
+
+    .djs-palette-entries {
+      display: flex !important;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 6px;
+      padding: 8px 12px;
+      justify-content: flex-start;
+    }
+
+    .djs-palette-entries .group {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .djs-palette .entry {
+      float: none !important;
+    }
+
+    .djs-palette .separator {
+      border: none;
+      border-right: solid 1px var(--palette-separator-color);
+      width: 0;
+      height: 32px;
+      margin: 0 10px;
+      padding: 0;
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    .djs-palette .entry,
+    .djs-context-pad .entry {
+      color: #f2f2f2 !important;
+    }
+
+    .djs-popup {
+      color: #f2f2f2 !important;
+      background: rgba(30, 30, 30, 0.98) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .djs-popup-search input {
+      color: #111111 !important;
+      background-color: #f0f0f0 !important;
+      -webkit-text-fill-color: #111111 !important;
+      caret-color: #111111;
+    }
+
+    .djs-popup-search input:focus {
+      color: #111111 !important;
+      -webkit-text-fill-color: #111111 !important;
+    }
+
+    .djs-popup-body .entry:hover:not(.disabled) {
+      background-color: rgba(101, 179, 255, 0.22);
+    }
+
+    /* Migas de drilldown: esquina del área del diagrama (la paleta ya no solapa el SVG) */
+    .djs-palette-shown .bjs-breadcrumbs,
+    .djs-palette-shown.djs-palette-two-column .bjs-breadcrumbs {
+      left: 14px !important;
+      top: 8px !important;
+    }
+
+    .djs-context-pad {
+      background: rgba(17, 20, 24, 0.94) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 14px;
+      padding: 4px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    }
+
+    .djs-context-pad .entry {
+      border-radius: 10px;
+    }
+
+    .djs-container .djs-label,
+    .djs-container text,
+    .djs-container tspan {
+      fill: #f4f7fb !important;
+      font-weight: 600;
+      paint-order: stroke;
+      stroke: rgba(11, 16, 23, 0.72);
+      stroke-width: 3px;
+      stroke-linejoin: round;
+    }
+
+    .djs-container .djs-connection .djs-visual > :nth-child(1),
+    .djs-container .djs-connection .djs-visual path,
+    .djs-container .djs-connection .djs-visual polyline {
+      stroke: #ffffff !important;
+      stroke-width: 2.6px !important;
+      fill: none !important;
+    }
+
+    /*
+     * Flechas / sequence flows: mejor edición de ruta (waypoints).
+     * - Área de clic más ancha para seleccionar la conexión.
+     * - Handles de esquina (bendpoints) más visibles en tema oscuro.
+     * - diagram-js oculta el marcador del punto medio (.djs-segment-dragger .djs-visual) hasta hover;
+     *   si el padre es display:block pero el hijo display:none, es casi imposible enganchar el hover.
+     *   Mostramos el dragger del segmento cuando la conexión está seleccionada o el grupo en hover.
+     */
+    .djs-container .djs-connection .djs-hit.djs-hit-stroke,
+    .djs-container .djs-connection .djs-hit.djs-hit-click-stroke {
+      stroke-width: 26px !important;
+    }
+
+    .djs-container .djs-bendpoints.selected .djs-bendpoint .djs-visual,
+    .djs-container .djs-bendpoints.hover .djs-bendpoint .djs-visual {
+      stroke-width: 2px !important;
+    }
+
+    .djs-container .djs-bendpoints.selected .djs-segment-dragger .djs-visual,
+    .djs-container .djs-bendpoints.hover .djs-segment-dragger .djs-visual {
+      display: block !important;
+      opacity: 0.55;
+    }
+
+    .djs-container .djs-bendpoints.selected .djs-segment-dragger:hover .djs-visual,
+    .djs-container .djs-bendpoints.hover .djs-segment-dragger:hover .djs-visual {
+      opacity: 1;
+    }
+
+    .djs-container marker path,
+    .djs-container marker polyline,
+    .djs-container marker polygon {
+      stroke: #ffffff !important;
+      fill: #ffffff !important;
+    }
+
+    .djs-element.flow-node-start .djs-visual > :nth-child(1),
+    .djs-element.flow-node-end .djs-visual > :nth-child(1) {
+      fill: #24303b !important;
+      stroke: #d7e5f2 !important;
+      stroke-width: 2.2px !important;
+    }
+
+    .djs-element.flow-node-task .djs-visual > :nth-child(1) {
+      fill: #22384a !important;
+      stroke: #79bdff !important;
+      stroke-width: 2.2px !important;
+    }
+
+    .djs-element.flow-node-task.flow-unbound-task .djs-visual > :nth-child(1) {
+      stroke: #ef956f !important;
+    }
+
+    .djs-element.flow-node-timer .djs-visual > :nth-child(1) {
+      fill: #2b2348 !important;
+      stroke: #b69aff !important;
+      stroke-width: 2.2px !important;
+    }
+
+    .djs-element.flow-node-timer .djs-visual > :nth-child(2) {
+      fill: #efe7ff !important;
+      stroke: #efe7ff !important;
+    }
+
+    .djs-element.flow-node-exclusive .djs-visual > :nth-child(1) {
+      fill: #3c2d16 !important;
+      stroke: #f2c66d !important;
+      stroke-width: 2.2px !important;
+    }
+
+    .djs-element.flow-node-exclusive .djs-visual > :nth-child(2) {
+      fill: #fff2d0 !important;
+      stroke: #fff2d0 !important;
+    }
+
+    .djs-element.flow-node-parallel .djs-visual > :nth-child(1) {
+      fill: #17372d !important;
+      stroke: #58d39f !important;
+      stroke-width: 2.2px !important;
+    }
+
+    .djs-element.flow-node-parallel .djs-visual > :nth-child(2) {
+      fill: #dff9ee !important;
+      stroke: #dff9ee !important;
+    }
+
+    .djs-element.selected .djs-outline {
+      stroke: #34a0ff !important;
+      stroke-width: 3px !important;
+    }
+
+    .flow-badge {
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 600;
+      color: white;
+      background: rgba(72, 132, 223, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .flow-badge.flow-badge-above {
+      transform: translateX(-50%);
+    }
+
+    .flow-badge.unbound {
+      background: rgba(195, 96, 74, 0.92);
+    }
+
+    .flow-badge.parallel {
+      background: rgba(63, 166, 119, 0.95);
+    }
+
+    .flow-badge.join {
+      background: rgba(79, 197, 150, 0.95);
+    }
+
+    .flow-badge.timer {
+      background: rgba(126, 92, 214, 0.95);
+    }
+
+    /* Edición directa de etiqueta: mismo lenguaje visual que la tarea (tema oscuro) */
+    .djs-direct-editing-parent {
+      background: #22384a !important;
+      color: #f4f7fb !important;
+      border: 1px solid rgba(121, 189, 255, 0.55) !important;
+      border-radius: 6px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .djs-direct-editing-content {
+      background: transparent !important;
+      color: #f4f7fb !important;
+      -webkit-text-fill-color: #f4f7fb !important;
+      caret-color: #8ec5ff;
+    }
+
+    /* Zoom: + porcentaje − (esquina inferior derecha, sobre la marca BPMN.io) */
+    .flow-zoom-controls {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      z-index: 280;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 10px;
+      background: rgba(22, 24, 28, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      user-select: none;
+    }
+
+    .flow-zoom-controls button {
+      width: 28px;
+      height: 28px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #e8eef6;
+      font-size: 18px;
+      font-weight: 500;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .flow-zoom-controls button:hover {
+      background: rgba(101, 179, 255, 0.28);
+      color: #ffffff;
+    }
+
+    .flow-zoom-controls button:active {
+      background: rgba(101, 179, 255, 0.4);
+    }
+
+    .flow-zoom-value {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 1px;
+      min-width: 52px;
+      justify-content: center;
+    }
+
+    .flow-zoom-value input {
+      width: 38px;
+      margin: 0;
+      padding: 4px 2px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      color: #f2f2f2;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: right;
+      -webkit-text-fill-color: #f2f2f2;
+    }
+
+    .flow-zoom-value input:focus {
+      outline: none;
+      border-color: #65b3ff;
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    .flow-zoom-value .flow-zoom-suffix {
+      font-size: 12px;
+      font-weight: 600;
+      color: #9caec4;
+      margin-left: 1px;
+    }
+
+    /*
+     * Live flow run: `canvas.addMarker(id, 'flow-execution-active')` on the element gfx (SVG <g>).
+     * High-contrast “inverse” look: light stroke + dark halo, thick borders, readable at low zoom.
+     */
+    /* Shapes (task, event, gateway): first paint layer only — avoids fat-stroking inner task icons */
+    g.flow-execution-active .djs-visual > :first-child,
+    .flow-execution-active .djs-visual > :first-child {
+      stroke: #f2f6ff !important;
+      stroke-width: 6px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #050608)
+        drop-shadow(0 0 1px #050608)
+        drop-shadow(0 0 6px rgba(0, 0, 0, 0.95))
+        drop-shadow(0 0 14px rgba(242, 246, 255, 0.45)) !important;
+    }
+
+    /* When the outer body is a group (some renderers), stroke its main outline path once */
+    g.flow-execution-active .djs-visual > g:first-child > path:first-of-type,
+    .flow-execution-active .djs-visual > g:first-child > path:first-of-type {
+      stroke: #f2f6ff !important;
+      stroke-width: 5px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #050608)
+        drop-shadow(0 0 2px rgba(0, 0, 0, 0.95))
+        drop-shadow(0 0 10px rgba(242, 246, 255, 0.35)) !important;
+    }
+
+    /* Sequence flows: thick light stroke + dark halo (inverse on dark diagram) */
+    g.flow-execution-active.djs-connection .djs-visual path,
+    g.flow-execution-active .djs-connection .djs-visual path {
+      stroke: #ffffff !important;
+      stroke-width: 6px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #000000)
+        drop-shadow(0 0 3px rgba(0, 0, 0, 1))
+        drop-shadow(0 0 12px rgba(255, 255, 255, 0.5)) !important;
+    }
+
+    /*
+     * Active BPMN tasks: salmon; stroke half of the previous 18px task highlight (9px).
+     * Marker `flow-execution-active-task` — bpmn-editor-app.js
+     */
+    g.flow-execution-active.flow-execution-active-task .djs-visual > :first-child,
+    .flow-execution-active.flow-execution-active-task .djs-visual > :first-child {
+      stroke: #f58778 !important;
+      stroke-width: 9px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #2a0a06)
+        drop-shadow(0 0 2px rgba(42, 10, 6, 0.95))
+        drop-shadow(0 0 10px rgba(245, 135, 120, 0.85))
+        drop-shadow(0 0 20px rgba(245, 135, 120, 0.45)) !important;
+    }
+
+    g.flow-execution-active.flow-execution-active-task .djs-visual > g:first-child > path:first-of-type,
+    .flow-execution-active.flow-execution-active-task .djs-visual > g:first-child > path:first-of-type {
+      stroke: #f58778 !important;
+      stroke-width: 9px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #2a0a06)
+        drop-shadow(0 0 2px rgba(42, 10, 6, 0.95))
+        drop-shadow(0 0 10px rgba(245, 135, 120, 0.85)) !important;
+    }
+
+    /*
+     * Exclusive gateway (IF) + intermediate events: −25% vs prior 12px / 10px (→ 9px / 7.5px).
+     * Markers `flow-execution-active-if`, `flow-execution-active-intermediate`
+     */
+    g.flow-execution-active.flow-execution-active-if .djs-visual > :first-child,
+    .flow-execution-active.flow-execution-active-if .djs-visual > :first-child,
+    g.flow-execution-active.flow-execution-active-intermediate .djs-visual > :first-child,
+    .flow-execution-active.flow-execution-active-intermediate .djs-visual > :first-child {
+      stroke: #f2f6ff !important;
+      stroke-width: 9px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #050608)
+        drop-shadow(0 0 1px #050608)
+        drop-shadow(0 0 8px rgba(0, 0, 0, 0.95))
+        drop-shadow(0 0 18px rgba(242, 246, 255, 0.55)) !important;
+    }
+
+    g.flow-execution-active.flow-execution-active-if .djs-visual > g:first-child > path:first-of-type,
+    .flow-execution-active.flow-execution-active-if .djs-visual > g:first-child > path:first-of-type,
+    g.flow-execution-active.flow-execution-active-intermediate .djs-visual > g:first-child > path:first-of-type,
+    .flow-execution-active.flow-execution-active-intermediate .djs-visual > g:first-child > path:first-of-type {
+      stroke: #f2f6ff !important;
+      stroke-width: 7.5px !important;
+      paint-order: stroke fill !important;
+      vector-effect: non-scaling-stroke !important;
+      filter:
+        drop-shadow(0 0 0 #050608)
+        drop-shadow(0 0 2px rgba(0, 0, 0, 0.95))
+        drop-shadow(0 0 12px rgba(242, 246, 255, 0.45)) !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="flow-palette-anchor"></div>
+    <div id="canvas"></div>
+    <div id="flow-zoom-controls" class="flow-zoom-controls" role="toolbar" aria-label="Diagram zoom">
+      <button type="button" id="flow-zoom-in" title="Zoom in">+</button>
+      <div class="flow-zoom-value">
+        <input type="text" id="flow-zoom-percent" value="100" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Zoom percent" />
+        <span class="flow-zoom-suffix">%</span>
+      </div>
+      <button type="button" id="flow-zoom-out" title="Zoom out">−</button>
+    </div>
+  </div>
+  <script src="./bpmn-modeler.development.js"></script>
+  <script src="./bpmn-editor-app.js"></script>
+</body>
+</html>

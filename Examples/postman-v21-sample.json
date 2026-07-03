@@ -1,0 +1,52 @@
+{
+  "info": {
+    "name": "Users API",
+    "description": "Example v2.1 collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://postman-echo.com"
+    }
+  ],
+  "item": [
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "javascript",
+                "exec": [
+                  "pm.response.to.have.status(200)"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/get?userId=123",
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "123"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

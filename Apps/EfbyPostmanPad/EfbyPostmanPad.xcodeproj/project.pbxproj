@@ -1,0 +1,361 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AAC0EEBD2B1E4B00AA000009 /* EfbyPostmanPadApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA000006 /* EfbyPostmanPadApp.swift */; };
+		AAC0EEBD2B1E4B00AA00000A /* PadShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA000007 /* PadShellView.swift */; };
+		AAC0EEBD2B1E4B00AA00000B /* EfbyPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = AAC0EEBD2B1E4B00AA000015 /* EfbyPresentation */; };
+		AAC0EEBD2B1E4B00AA000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA000017 /* Assets.xcassets */; };
+		AAC0EEBD2B1E4B00AA00001A /* PadRequestWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA000019 /* PadRequestWorkspaceView.swift */; };
+		AAC0EEBD2B1E4B00AA00001B /* PadFlowUIExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA00001C /* PadFlowUIExtras.swift */; };
+		AAC0EEBD2B1E4B00AA00001D /* BPMN in Resources */ = {isa = PBXBuildFile; fileRef = AAC0EEBD2B1E4B00AA00001E /* BPMN */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AAC0EEBD2B1E4B00AA000006 /* EfbyPostmanPadApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EfbyPostmanPadApp.swift; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA000007 /* PadShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PadShellView.swift; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA000008 /* EfbyPostmanPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EfbyPostmanPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAC0EEBD2B1E4B00AA000017 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA000019 /* PadRequestWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PadRequestWorkspaceView.swift; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA00001C /* PadFlowUIExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PadFlowUIExtras.swift; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA00001E /* BPMN */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BPMN; path = ../../Sources/EFBYPostman/Resources/BPMN; sourceTree = "<group>"; };
+		AAC0EEBD2B1E4B00AA000020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AAC0EEBD2B1E4B00AA00000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAC0EEBD2B1E4B00AA00000B /* EfbyPresentation in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AAC0EEBD2B1E4B00AA000003 = {
+			isa = PBXGroup;
+			children = (
+				AAC0EEBD2B1E4B00AA000020 /* Info.plist */,
+				AAC0EEBD2B1E4B00AA000005 /* Sources */,
+				AAC0EEBD2B1E4B00AA00001E /* BPMN */,
+				AAC0EEBD2B1E4B00AA000017 /* Assets.xcassets */,
+				AAC0EEBD2B1E4B00AA000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AAC0EEBD2B1E4B00AA000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AAC0EEBD2B1E4B00AA000008 /* EfbyPostmanPad.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AAC0EEBD2B1E4B00AA000005 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AAC0EEBD2B1E4B00AA000006 /* EfbyPostmanPadApp.swift */,
+				AAC0EEBD2B1E4B00AA000007 /* PadShellView.swift */,
+				AAC0EEBD2B1E4B00AA000019 /* PadRequestWorkspaceView.swift */,
+				AAC0EEBD2B1E4B00AA00001C /* PadFlowUIExtras.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AAC0EEBD2B1E4B00AA000002 /* EfbyPostmanPad */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAC0EEBD2B1E4B00AA00000F /* Build configuration list for PBXNativeTarget "EfbyPostmanPad" */;
+			buildPhases = (
+				AAC0EEBD2B1E4B00AA00000C /* Sources */,
+				AAC0EEBD2B1E4B00AA00000D /* Frameworks */,
+				AAC0EEBD2B1E4B00AA000016 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EfbyPostmanPad;
+			packageProductDependencies = (
+				AAC0EEBD2B1E4B00AA000015 /* EfbyPresentation */,
+			);
+			productName = EfbyPostmanPad;
+			productReference = AAC0EEBD2B1E4B00AA000008 /* EfbyPostmanPad.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AAC0EEBD2B1E4B00AA000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					AAC0EEBD2B1E4B00AA000002 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = AAC0EEBD2B1E4B00AA00000E /* Build configuration list for PBXProject "EfbyPostmanPad" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AAC0EEBD2B1E4B00AA000003;
+			packageReferences = (
+				AAC0EEBD2B1E4B00AA000014 /* XCLocalSwiftPackageReference "../../" */,
+			);
+			productRefGroup = AAC0EEBD2B1E4B00AA000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AAC0EEBD2B1E4B00AA000002 /* EfbyPostmanPad */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AAC0EEBD2B1E4B00AA000016 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAC0EEBD2B1E4B00AA000018 /* Assets.xcassets in Resources */,
+				AAC0EEBD2B1E4B00AA00001D /* BPMN in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AAC0EEBD2B1E4B00AA00000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAC0EEBD2B1E4B00AA000009 /* EfbyPostmanPadApp.swift in Sources */,
+				AAC0EEBD2B1E4B00AA00000A /* PadShellView.swift in Sources */,
+				AAC0EEBD2B1E4B00AA00001A /* PadRequestWorkspaceView.swift in Sources */,
+				AAC0EEBD2B1E4B00AA00001B /* PadFlowUIExtras.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AAC0EEBD2B1E4B00AA000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = FYU5QTGXLB;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AAC0EEBD2B1E4B00AA000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = FYU5QTGXLB;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		AAC0EEBD2B1E4B00AA000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "EFBY Request Lab";
+				INFOPLIST_KEY_CFBundleName = "EFBY Request Lab";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = efbypostmanpad.EfbyPostmanPad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AAC0EEBD2B1E4B00AA000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "EFBY Request Lab";
+				INFOPLIST_KEY_CFBundleName = "EFBY Request Lab";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = efbypostmanpad.EfbyPostmanPad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AAC0EEBD2B1E4B00AA00000E /* Build configuration list for PBXProject "EfbyPostmanPad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAC0EEBD2B1E4B00AA000010 /* Debug */,
+				AAC0EEBD2B1E4B00AA000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAC0EEBD2B1E4B00AA00000F /* Build configuration list for PBXNativeTarget "EfbyPostmanPad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAC0EEBD2B1E4B00AA000012 /* Debug */,
+				AAC0EEBD2B1E4B00AA000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AAC0EEBD2B1E4B00AA000014 /* XCLocalSwiftPackageReference "../../" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AAC0EEBD2B1E4B00AA000015 /* EfbyPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AAC0EEBD2B1E4B00AA000014 /* XCLocalSwiftPackageReference "../../" */;
+			productName = EfbyPresentation;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = AAC0EEBD2B1E4B00AA000001 /* Project object */;
+}

@@ -1,0 +1,234 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		EFBYSHARE01 /* EfbyShareIPALauncherApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBYSHARE11 /* EfbyShareIPALauncherApp.swift */; };
+		EFBYSHARE02 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBYSHARE12 /* ContentView.swift */; };
+		EFBYSHARE03 /* RepoDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBYSHARE13 /* RepoDetector.swift */; };
+		EFBYSHARE04 /* ScriptRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBYSHARE14 /* ScriptRunner.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		EFBYSHARE10 /* EfbyShareIPALauncher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EfbyShareIPALauncher.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFBYSHARE11 /* EfbyShareIPALauncherApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EfbyShareIPALauncherApp.swift; sourceTree = "<group>"; };
+		EFBYSHARE12 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		EFBYSHARE13 /* RepoDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoDetector.swift; sourceTree = "<group>"; };
+		EFBYSHARE14 /* ScriptRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptRunner.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		EFBYSHARE20 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		EFBYSHARE30 = {
+			isa = PBXGroup;
+			children = (
+				EFBYSHARE40 /* Sources */,
+				EFBYSHARE31 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EFBYSHARE31 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EFBYSHARE10 /* EfbyShareIPALauncher.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		EFBYSHARE40 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				EFBYSHARE11 /* EfbyShareIPALauncherApp.swift */,
+				EFBYSHARE12 /* ContentView.swift */,
+				EFBYSHARE13 /* RepoDetector.swift */,
+				EFBYSHARE14 /* ScriptRunner.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EFBYSHARE50 /* EfbyShareIPALauncher */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EFBYSHARE51 /* Build configuration list for PBXNativeTarget "EfbyShareIPALauncher" */;
+			buildPhases = (
+				EFBYSHARE52 /* Sources */,
+				EFBYSHARE20 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EfbyShareIPALauncher;
+			productName = EfbyShareIPALauncher;
+			productReference = EFBYSHARE10 /* EfbyShareIPALauncher.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EFBYSHARE60 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					EFBYSHARE50 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = EFBYSHARE61 /* Build configuration list for PBXProject "EfbyShareIPALauncher" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = es;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				es,
+				Base,
+			);
+			mainGroup = EFBYSHARE30;
+			productRefGroup = EFBYSHARE31 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EFBYSHARE50 /* EfbyShareIPALauncher */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		EFBYSHARE52 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EFBYSHARE01 /* EfbyShareIPALauncherApp.swift in Sources */,
+				EFBYSHARE02 /* ContentView.swift in Sources */,
+				EFBYSHARE03 /* RepoDetector.swift in Sources */,
+				EFBYSHARE04 /* ScriptRunner.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		EFBYSHARE70 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "EFBY IPA";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		EFBYSHARE71 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "EFBY IPA";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		EFBYSHARE72 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FYU5QTGXLB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = efby.share.ipa.launcher;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		EFBYSHARE73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FYU5QTGXLB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = efby.share.ipa.launcher;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		EFBYSHARE51 /* Build configuration list for PBXNativeTarget "EfbyShareIPALauncher" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EFBYSHARE72 /* Debug */,
+				EFBYSHARE73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EFBYSHARE61 /* Build configuration list for PBXProject "EfbyShareIPALauncher" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EFBYSHARE70 /* Debug */,
+				EFBYSHARE71 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = EFBYSHARE60 /* Project object */;
+}

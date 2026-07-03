@@ -1,0 +1,55 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Swift Package Manager (raíz y subproyectos)
+.build/
+**/.build/
+Packages/
+.swiftpm/
+Package.pins
+
+# Xcode / DerivedData
+DerivedData/
+**/DerivedData/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+xcuserdata/
+*.xcscmblueprint
+
+# iPad app — artefactos locales de Xcode/SPM (prefijos variables)
+Apps/EfbyPostmanPad/.build*/
+Apps/EfbyPostmanPad/.derivedData*/
+.derivedDataPad/
+
+# Distribución local (binarios se publican en GitHub Releases)
+/Distribution/
+!/Distribution/.gitkeep
+*.dmg
+*.ipa
+*.xcarchive
+
+# Iconos generados por build_dmg.sh (AppIcon.png sí se versiona como fuente)
+Resources/AppIcon.icns
+
+# Spikes y experimentos (fuera del alcance del proyecto)
+/Spikes/
+
+# Herramientas locales / IDE
+.cursor/
+.vscode/
+.tmp_notarize_app_dmg_skill/
+
+# Secretos y credenciales
+.netrc
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.pem
+!Examples/**/*.pem

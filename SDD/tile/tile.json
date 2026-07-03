@@ -1,0 +1,24 @@
+{
+  "name": "efbyproyectos/efby-request-lab",
+  "version": "1.0.7",
+  "summary": "Aplicación macOS (Swift 6) para laboratorio de peticiones HTTP/WebSocket, colecciones Postman, entornos y flujos BPMN sobre el workspace.",
+  "docs": "docs/index.md",
+  "private": true,
+  "steering": {
+    "checklist-desde-cero": {
+      "rules": "rules/checklist-implementacion-desde-cero.md"
+    },
+    "agentes-cursor-codex": {
+      "rules": "rules/agents-cursor-codex.md"
+    },
+    "especificaciones-desarrollo": {
+      "rules": "rules/especificaciones-desarrollo.md"
+    },
+    "funcionalidades-requeridas": {
+      "rules": "rules/funcionalidades-requeridas.md"
+    },
+    "seguridad-encriptacion": {
+      "rules": "rules/seguridad-encriptacion.md"
+    }
+  }
+}
