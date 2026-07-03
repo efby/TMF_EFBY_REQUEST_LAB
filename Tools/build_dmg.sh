@@ -24,12 +24,19 @@ ENABLE_NOTARIZATION=0
 
 submit_for_notarization() {
   local artifact="$1"
-  if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${TEAM_ID:-}" ]]; then
+  # Trim whitespace/newlines often introduced when pasting GitHub secrets.
+  local apple_id password team_id
+  apple_id="$(printf '%s' "${APPLE_ID:-}" | tr -d '[:space:]')"
+  password="$(printf '%s' "${APPLE_APP_SPECIFIC_PASSWORD:-}" | tr -d '[:space:]')"
+  team_id="$(printf '%s' "${TEAM_ID:-}" | tr -d '[:space:]')"
+
+  if [[ -n "$apple_id" && -n "$password" && -n "$team_id" ]]; then
     echo "Submitting $(basename "$artifact") to Apple notarization (Apple ID credentials)…"
+    echo "Using Apple ID length=${#apple_id}, team-id=$team_id, password length=${#password}"
     xcrun notarytool submit "$artifact" \
-      --apple-id "$APPLE_ID" \
-      --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-      --team-id "$TEAM_ID" \
+      --apple-id "$apple_id" \
+      --password "$password" \
+      --team-id "$team_id" \
       --wait
   else
     echo "Submitting $(basename "$artifact") to Apple notarization (keychain profile: $NOTARY_PROFILE)…"
