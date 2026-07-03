@@ -17,11 +17,18 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Build release binary
-        run: swift build -c release --product EfbyRequestLabs
+      - name: Run tests
+        run: swift test
 
       - name: Build DMG (unsigned)
         run: ./Tools/build_dmg.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EFBYRequestLab-dmg-${{ github.ref_name }}
+          path: Distribution/EFBYRequestLab.dmg
+          if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

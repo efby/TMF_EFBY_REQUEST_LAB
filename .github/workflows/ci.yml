@@ -5,18 +5,31 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 jobs:
-  build-and-test:
+  test-and-package:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Build
-        run: swift build
+      - name: Resolve packages
+        run: swift package resolve
 
-      - name: Test
+      - name: Run tests
         run: swift test
+
+      - name: Build DMG
+        run: ./Tools/build_dmg.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EFBYRequestLab-dmg
+          path: Distribution/EFBYRequestLab.dmg
+          if-no-files-found: error
+          retention-days: 14
