@@ -49,6 +49,7 @@ Resources/AppIcon.icns
 .netrc
 .env
 .env.*
+.secretos/
 *.p12
 *.mobileprovision
 *.pem
