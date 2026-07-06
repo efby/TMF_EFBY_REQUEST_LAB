@@ -6,6 +6,8 @@ Cliente API nativo para macOS con compatibilidad Postman, orquestación BPMN y s
 
 **Vídeo demo:** [youtu.be/Q15wS9GjTJ0](https://youtu.be/Q15wS9GjTJ0)
 
+**Slides (PDF):** [docs/presentacion/EFBY-Request-Lab-Slides.pdf](docs/presentacion/EFBY-Request-Lab-Slides.pdf)
+
 ## Descripción
 
 EFBY Request Lab es un laboratorio de APIs de escritorio escrito en Swift. Permite importar colecciones Postman y especificaciones OpenAPI, ejecutar peticiones HTTP y WebSocket con variables por capas, scripts JavaScript compatibles con `pm.*`, y orquestar flujos multi-petición mediante un editor BPMN integrado.

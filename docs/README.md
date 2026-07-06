@@ -39,6 +39,13 @@
 
 Las specs funcionales viven en `SDD/tile/specs/*.spec.md`. Cada una incluye una sección **Trazabilidad** con IDs `REQ-*` enlazados a la [matriz de trazabilidad](traceability-matrix.md).
 
+## Presentación
+
+| Recurso | Ubicación |
+|---------|-----------|
+| Slides (PDF, 18 diapositivas) | [presentacion/EFBY-Request-Lab-Slides.pdf](presentacion/EFBY-Request-Lab-Slides.pdf) |
+| Fuente HTML (editable) | [presentacion/slides.html](presentacion/slides.html) |
+
 ## Enlaces útiles
 
 | Recurso | URL |

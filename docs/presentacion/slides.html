@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>EFBY Request Lab — Presentación</title>
+  <style>
+    @page {
+      size: 1280px 720px;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #1a1a2e;
+      background: #fff;
+    }
+
+    .slide {
+      width: 1280px;
+      height: 720px;
+      padding: 56px 72px;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slide:last-child {
+      page-break-after: auto;
+    }
+
+    .slide.dark {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 55%, #0f766e 100%);
+      color: #f8fafc;
+    }
+
+    .slide.light {
+      background: #ffffff;
+    }
+
+    .slide.accent {
+      background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+    }
+
+    .kicker {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0f766e;
+      margin-bottom: 12px;
+    }
+
+    .slide.dark .kicker {
+      color: #5eead4;
+    }
+
+    h1 {
+      font-size: 52px;
+      line-height: 1.1;
+      margin-bottom: 18px;
+      font-weight: 800;
+    }
+
+    h2 {
+      font-size: 40px;
+      line-height: 1.15;
+      margin-bottom: 28px;
+      font-weight: 800;
+    }
+
+    h3 {
+      font-size: 22px;
+      margin-bottom: 12px;
+      font-weight: 700;
+      color: #0f766e;
+    }
+
+    .slide.dark h3 {
+      color: #99f6e4;
+    }
+
+    p, li {
+      font-size: 22px;
+      line-height: 1.45;
+    }
+
+    ul {
+      margin-left: 28px;
+    }
+
+    li {
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 26px;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+
+    .slide.dark .subtitle {
+      color: #cbd5e1;
+    }
+
+    .meta {
+      font-size: 18px;
+      color: #64748b;
+      margin-top: 24px;
+    }
+
+    .slide.dark .meta {
+      color: #94a3b8;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 36px;
+      flex: 1;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #dbeafe;
+      border-radius: 16px;
+      padding: 22px 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .slide.dark .card {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 17px;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #ecfeff;
+      font-weight: 700;
+    }
+
+    .slide.dark th {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .slide.dark td, .slide.dark th {
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 15px;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .diagram {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 20px 24px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 16px;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    .slide.dark .diagram {
+      background: rgba(15, 23, 42, 0.55);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #e2e8f0;
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 28px;
+      left: 72px;
+      right: 72px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .slide.dark .footer {
+      color: #cbd5e1;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .badge {
+      background: #ccfbf1;
+      color: #115e59;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .slide.dark .badge {
+      background: rgba(94, 234, 212, 0.18);
+      color: #ccfbf1;
+    }
+
+    .highlight {
+      color: #0f766e;
+      font-weight: 700;
+    }
+
+    .slide.dark .highlight {
+      color: #5eead4;
+    }
+
+    .links {
+      font-size: 20px;
+      line-height: 1.8;
+    }
+
+    .links a {
+      color: #0f766e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .slide.dark .links a {
+      color: #5eead4;
+    }
+  </style>
+</head>
+<body>
+
+  <section class="slide dark">
+    <div class="kicker">Trabajo de Fin de Máster — MoureDev</div>
+    <h1>EFBY Request Lab</h1>
+    <p class="subtitle">Cliente API nativo para macOS con compatibilidad Postman, orquestación BPMN y sincronización Git</p>
+    <div class="badge-row">
+      <span class="badge">Swift 6.3</span>
+      <span class="badge">Clean Architecture</span>
+      <span class="badge">SDD + TDD</span>
+      <span class="badge">166 tests</span>
+      <span class="badge">DMG notarizado</span>
+    </div>
+    <p class="meta">Autor: Raúl Rodríguez · 2026</p>
+    <div class="footer"><span>EFBY Request Lab</span><span>1 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Contexto</div>
+    <h2>El problema</h2>
+    <ul>
+      <li>Los equipos dependen de clientes cloud (Postman, Insomnia) para probar APIs.</li>
+      <li>Es difícil versionar colecciones junto al código en Git sin fricción.</li>
+      <li>El Collection Runner es lineal: sin ramas condicionales ni paralelismo visual.</li>
+      <li>Falta una herramienta nativa macOS/iPad integrada en el ecosistema Swift del equipo.</li>
+    </ul>
+    <div class="footer"><span>EFBY Request Lab</span><span>2 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Propuesta</div>
+    <h2>La solución</h2>
+    <div class="two-col">
+      <div>
+        <p><span class="highlight">EFBY Request Lab</span> es un laboratorio API nativo que ofrece:</p>
+        <ul>
+          <li>HTTP y WebSocket con variables por capas</li>
+          <li>Scripts JavaScript compatibles con <code>pm.*</code></li>
+          <li>Import/export Postman y OpenAPI</li>
+          <li>Workspace local + sync Git manual</li>
+          <li>Flujos BPMN con gateways y paralelismo</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Usuarios objetivo</h3>
+        <ul>
+          <li><strong>Desarrollador backend</strong> — endpoints y scripts</li>
+          <li><strong>QA / integración</strong> — colecciones y flujos</li>
+          <li><strong>DevOps</strong> — colecciones en repo Git</li>
+          <li><strong>Equipo EFBY</strong> — herramienta offline</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer"><span>EFBY Request Lab</span><span>3 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Comparativa</div>
+    <h2>Diferenciadores vs Postman</h2>
+    <table>
+      <tr>
+        <th>Aspecto</th>
+        <th>Postman</th>
+        <th>EFBY Request Lab</th>
+      </tr>
+      <tr>
+        <td>Plataforma</td>
+        <td>Electron multi-OS</td>
+        <td>Nativo Swift/SwiftUI macOS + iPad</td>
+      </tr>
+      <tr>
+        <td>Sincronización</td>
+        <td>Cloud para equipos</td>
+        <td>Git manual, control total</td>
+      </tr>
+      <tr>
+        <td>Flujos</td>
+        <td>Collection Runner lineal</td>
+        <td>BPMN con gateways, paralelismo y timers</td>
+      </tr>
+      <tr>
+        <td>Offline</td>
+        <td>Limitado</td>
+        <td>Workspace 100 % local</td>
+      </tr>
+      <tr>
+        <td>Código</td>
+        <td>Cerrado</td>
+        <td>Open source en GitHub</td>
+      </tr>
+    </table>
+    <div class="footer"><span>EFBY Request Lab</span><span>4 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Producto</div>
+    <h2>Funcionalidades principales</h2>
+    <div class="two-col">
+      <ul>
+        <li><strong>HTTP</strong> — editor, auth, TLS, scripts, historial</li>
+        <li><strong>WebSocket</strong> — transcript, ping, scripts</li>
+        <li><strong>Variables</strong> — global, colección, entorno y local</li>
+        <li><strong>Postman</strong> — Collection v2.0/v2.1 y entornos</li>
+        <li><strong>OpenAPI</strong> — importación 3.0/3.1 JSON</li>
+      </ul>
+      <ul>
+        <li><strong>Git</strong> — pull/push manual de colecciones</li>
+        <li><strong>BPMN</strong> — editor visual y ejecución de flujos</li>
+        <li><strong>Scripts</strong> — <code>pm.crypto</code> RSA/AES</li>
+        <li><strong>iPad</strong> — variante <code>EfbyPostmanPad</code></li>
+        <li><strong>Sin login</strong> — app de escritorio offline</li>
+      </ul>
+    </div>
+    <div class="footer"><span>EFBY Request Lab</span><span>5 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Tecnología</div>
+    <h2>Stack tecnológico</h2>
+    <table>
+      <tr><th>Componente</th><th>Tecnología</th></tr>
+      <tr><td>Lenguaje</td><td>Swift 6.3 (concurrencia estricta)</td></tr>
+      <tr><td>UI</td><td>SwiftUI + AppKit (macOS) / SwiftUI (iPad)</td></tr>
+      <tr><td>Paquetes</td><td>Swift Package Manager</td></tr>
+      <tr><td>Red</td><td>URLSession, WebSocket nativo</td></tr>
+      <tr><td>Scripts</td><td>JavaScriptCore (<code>pm.*</code>)</td></tr>
+      <tr><td>Persistencia</td><td>JSON local + Git manual</td></tr>
+      <tr><td>Flujos</td><td>BPMN en WebView embebido</td></tr>
+      <tr><td>CI/CD</td><td>GitHub Actions + DMG notarizado</td></tr>
+    </table>
+    <div class="footer"><span>EFBY Request Lab</span><span>6 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Arquitectura</div>
+    <h2>Clean Architecture en capas SPM</h2>
+    <div class="diagram">EfbyRequestLabs / EfbyPostmanPad (UI SwiftUI)
+        ↓
+EfbyPresentation (MainViewModel, coordinadores, AppDependencies)
+        ↓
+EfbyApplication (Ports + Use Cases)
+        ↓
+EfbyDomain (modelos)
+        ↑
+EfbyInfrastructure (implementa Ports)</div>
+    <p style="margin-top: 18px;">Domain no importa SwiftUI. Application no usa URLSession directamente: solo vía ports en Infrastructure.</p>
+    <div class="footer"><span>EFBY Request Lab</span><span>7 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Módulos</div>
+    <h2>Targets SPM y responsabilidades</h2>
+    <table>
+      <tr><th>Target</th><th>Responsabilidad</th></tr>
+      <tr><td><code>EfbyDomain</code></td><td>Modelos de dominio puros</td></tr>
+      <tr><td><code>EfbyApplication</code></td><td>Puertos y casos de uso</td></tr>
+      <tr><td><code>EfbyInfrastructure</code></td><td>HTTP, WS, Git, scripts, codecs, repos</td></tr>
+      <tr><td><code>EfbyPresentation</code></td><td>ViewModel, coordinadores, composition root</td></tr>
+      <tr><td><code>EfbyRequestLabs</code></td><td>Aplicación macOS</td></tr>
+      <tr><td><code>FlowDebugRunner</code></td><td>CLI de depuración de flujos</td></tr>
+    </table>
+    <div class="footer"><span>EFBY Request Lab</span><span>8 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Orquestación UI</div>
+    <h2>Coordinadores de presentación</h2>
+    <div class="two-col">
+      <ul>
+        <li><code>GitWorkspaceCoordinator</code></li>
+        <li><code>GitSessionCoordinator</code></li>
+        <li><code>RequestTabCoordinator</code></li>
+        <li><code>RequestTabsCoordinator</code></li>
+        <li><code>WebSocketExecutionCoordinator</code></li>
+        <li><code>FlowExecutionCoordinator</code></li>
+      </ul>
+      <ul>
+        <li><code>WorkspacePersistenceCoordinator</code></li>
+        <li><code>DocumentImportCoordinator</code></li>
+        <li><code>SharedWorkspaceCoordinator</code></li>
+        <li><code>EnvironmentCoordinator</code></li>
+        <li><code>WorkspaceCatalogCoordinator</code></li>
+        <li><code>BitbucketPadCoordinator</code></li>
+      </ul>
+    </div>
+    <p style="margin-top: 12px;">El <code>MainViewModel</code> actúa como fachada UI; la lógica de dominio vive en coordinadores y casos de uso.</p>
+    <div class="footer"><span>EFBY Request Lab</span><span>9 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Flujo</div>
+    <h2>Ejecución HTTP (ejemplo)</h2>
+    <ol style="margin-left: 28px; font-size: 22px; line-height: 1.55;">
+      <li>La vista llama a <code>MainViewModel.sendCurrentRequest()</code>.</li>
+      <li><code>RequestTabCoordinator</code> invoca <code>ExecuteHTTPRequestUseCase</code>.</li>
+      <li>El use case usa <code>HTTPExecutionServiceProtocol</code>.</li>
+      <li><code>RequestExecutionService</code> ejecuta la petición y los scripts.</li>
+      <li>El ViewModel aplica variables y persiste vía <code>WorkspacePersistenceCoordinator</code>.</li>
+    </ol>
+    <div class="footer"><span>EFBY Request Lab</span><span>10 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Persistencia</div>
+    <h2>Tres capas de datos</h2>
+    <div class="two-col">
+      <div class="card">
+        <h3>1. Local</h3>
+        <p><code>WorkspaceRepository</code> guarda el workspace en Application Support: pestañas, historial, configuración.</p>
+      </div>
+      <div class="card">
+        <h3>2. Workdir Git</h3>
+        <p><code>SharedCollectionsRepository</code> gestiona colecciones, entornos y flows en el directorio compartido.</p>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 20px;">
+      <h3>3. Remoto</h3>
+      <p>Pull/push manual con <code>GitSessionCoordinator</code> y <code>GitWorkspaceCoordinator</code>. Sin backend propio ni sync cloud.</p>
+    </div>
+    <div class="footer"><span>EFBY Request Lab</span><span>11 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Metodología</div>
+    <h2>Specification-Driven Development (SDD)</h2>
+    <p>Las specs son la fuente de verdad funcional antes de implementar el código.</p>
+    <ul style="margin-top: 18px;">
+      <li><strong>10 especificaciones</strong> en <code>SDD/tile/specs/*.spec.md</code></li>
+      <li>Cada spec define comportamiento, criterios de verificación y trazabilidad</li>
+      <li>IDs <code>REQ-*</code> enlazados a tests en la matriz de trazabilidad</li>
+      <li>Reglas de desarrollo y seguridad en <code>SDD/tile/rules/</code></li>
+    </ul>
+    <div class="footer"><span>EFBY Request Lab</span><span>12 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Specs</div>
+    <h2>Las 10 especificaciones SDD</h2>
+    <table>
+      <tr><th>Spec</th><th>Área</th></tr>
+      <tr><td>http-request-execution</td><td>Pipeline HTTP completo</td></tr>
+      <tr><td>variable-resolution</td><td>Precedencia de variables</td></tr>
+      <tr><td>javascript-pm-runtime</td><td>Runtime <code>pm.*</code> y criptografía</td></tr>
+      <tr><td>websocket-client</td><td>Cliente WebSocket</td></tr>
+      <tr><td>workspace-flow</td><td>Flujos BPMN</td></tr>
+      <tr><td>postman-interop</td><td>Import/export Postman y OpenAPI</td></tr>
+      <tr><td>git-workspace</td><td>Operaciones Git</td></tr>
+      <tr><td>persistencia-workspace</td><td>Persistencia JSON y migraciones</td></tr>
+      <tr><td>main-view-model-workspace</td><td>Coordinador de workspace</td></tr>
+      <tr><td>javascript-tooling</td><td>Editor y autocompletado JS</td></tr>
+    </table>
+    <div class="footer"><span>EFBY Request Lab</span><span>13 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Calidad</div>
+    <h2>Test-Driven Development (TDD)</h2>
+    <div class="two-col">
+      <div>
+        <p>Ciclo <strong>Red → Green → Refactor</strong> aplicado en todo el proyecto.</p>
+        <ul style="margin-top: 16px;">
+          <li><strong>166 tests</strong> automatizados en <code>AppCoreTests</code></li>
+          <li><strong>36 requisitos REQ-*</strong> con trazabilidad spec → test</li>
+          <li>Tests deterministas con red simulada (<code>URLProtocol</code>)</li>
+          <li>CI ejecuta <code>swift test</code> en cada push</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Suites destacadas</h3>
+        <ul>
+          <li>RequestExecutionServiceTests</li>
+          <li>WorkspaceFlow*Tests</li>
+          <li>PostmanCollectionCodecTests</li>
+          <li>GitRepositoryServiceTests</li>
+          <li>ScriptEngineTests</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer"><span>EFBY Request Lab</span><span>14 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Decisiones</div>
+    <h2>Architecture Decision Records (ADR)</h2>
+    <table>
+      <tr><th>ADR</th><th>Decisión</th></tr>
+      <tr><td>ADR-001</td><td>SPM con módulos compartidos macOS/iPad</td></tr>
+      <tr><td>ADR-002</td><td>Clean Architecture + MVVM en presentación</td></tr>
+      <tr><td>ADR-003</td><td>JavaScriptCore para runtime Postman parcial</td></tr>
+      <tr><td>ADR-004</td><td>Persistencia JSON local + Git manual</td></tr>
+      <tr><td>ADR-005</td><td>BPMN como orquestación de flujos API</td></tr>
+    </table>
+    <div class="footer"><span>EFBY Request Lab</span><span>15 / 18</span></div>
+  </section>
+
+  <section class="slide accent">
+    <div class="kicker">Despliegue</div>
+    <h2>CI/CD y distribución</h2>
+    <div class="two-col">
+      <div>
+        <h3>GitHub Actions</h3>
+        <ul>
+          <li><code>ci.yml</code> — build + tests en macOS 26 / Swift 6.3</li>
+          <li><code>release.yml</code> — tag <code>v*</code> genera DMG</li>
+          <li>Firma Developer ID + notarización Apple</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Instalación</h3>
+        <ol style="margin-left: 24px; font-size: 20px; line-height: 1.6;">
+          <li>Descargar DMG desde GitHub Releases</li>
+          <li>Arrastrar a Applications</li>
+          <li>Ejecutar sin bloqueo de Gatekeeper</li>
+        </ol>
+      </div>
+    </div>
+    <pre style="margin-top: 18px;">swift build && swift test
+./Tools/build_dmg.sh --sign --notarize</pre>
+    <div class="footer"><span>EFBY Request Lab</span><span>16 / 18</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="kicker">Repositorio</div>
+    <h2>Estructura del proyecto</h2>
+    <pre>Sources/
+  AppCore/Domain/          → EfbyDomain
+  AppCore/Application/     → EfbyInfrastructure
+  EfbyApplication/         → Ports + Use Cases
+  EfbyPresentation/        → ViewModel + Coordinadores
+  EFBYPostman/             → App macOS
+Tests/AppCoreTests/        → 166 tests
+docs/                      → Documentación y ADRs
+SDD/tile/specs/            → 10 especificaciones
+.github/workflows/         → CI y releases</pre>
+    <div class="footer"><span>EFBY Request Lab</span><span>17 / 18</span></div>
+  </section>
+
+  <section class="slide dark">
+    <div class="kicker">Entrega</div>
+    <h2>Enlaces y cierre</h2>
+    <div class="links">
+      <p><strong>Repositorio:</strong> <a href="https://github.com/efby/TMF_EFBY_REQUEST_LAB">github.com/efby/TMF_EFBY_REQUEST_LAB</a></p>
+      <p><strong>DMG notarizado:</strong> <a href="https://github.com/efby/TMF_EFBY_REQUEST_LAB/releases/latest">GitHub Releases</a></p>
+      <p><strong>Vídeo demo:</strong> <a href="https://youtu.be/Q15wS9GjTJ0">youtu.be/Q15wS9GjTJ0</a></p>
+      <p><strong>Documentación:</strong> <code>docs/README.md</code> en el repositorio</p>
+    </div>
+    <p class="subtitle" style="margin-top: 36px; color: #cbd5e1;">Cliente API nativo · Offline · Open source · Listo para producción</p>
+    <p class="meta">Gracias</p>
+    <div class="footer"><span>EFBY Request Lab</span><span>18 / 18</span></div>
+  </section>
+
+</body>
+</html>
