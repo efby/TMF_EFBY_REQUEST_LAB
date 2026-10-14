@@ -22,6 +22,27 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-efby-requestlabs-notary}"
 ENABLE_SIGNING=0
 ENABLE_NOTARIZATION=0
 
+resolve_app_version() {
+  if [[ -n "${EFBY_APP_VERSION:-}" ]]; then
+    printf '%s' "${EFBY_APP_VERSION#v}"
+    return
+  fi
+  local ref="${GITHUB_REF_NAME:-}"
+  if [[ "$ref" == v* ]]; then
+    printf '%s' "${ref#v}"
+    return
+  fi
+  local tag
+  tag="$(git -C "$ROOT_DIR" describe --tags --abbrev=0 2>/dev/null || true)"
+  if [[ "$tag" == v* ]]; then
+    printf '%s' "${tag#v}"
+    return
+  fi
+  printf '%s' "1.0.0"
+}
+
+APP_VERSION="$(resolve_app_version)"
+
 submit_for_notarization() {
   local artifact="$1"
   # Trim whitespace/newlines often introduced when pasting GitHub secrets.
@@ -128,9 +149,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>__APP_VERSION__</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>__APP_VERSION__</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppTransportSecurity</key>
@@ -158,6 +179,11 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+sed -i '' \
+  -e "s/__APP_VERSION__/${APP_VERSION}/g" \
+  "$APP_DIR/Contents/Info.plist"
+echo "App version: $APP_VERSION"
 
 ditto "$BINARY_PATH" "$APP_DIR/Contents/MacOS/$PRODUCT_NAME"
 chmod +x "$APP_DIR/Contents/MacOS/$PRODUCT_NAME"
