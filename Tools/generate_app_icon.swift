@@ -49,8 +49,7 @@ struct IconGenerator {
             ) else { return nil }
 
             context.interpolationQuality = .high
-            context.translateBy(x: 0, y: CGFloat(renderedHeight))
-            context.scaleBy(x: scale, y: -scale)
+            context.scaleBy(x: scale, y: scale)
             context.drawPDFPage(page)
 
             guard let cgImage = context.makeImage() else { return nil }
