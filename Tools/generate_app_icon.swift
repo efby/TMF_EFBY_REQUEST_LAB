@@ -248,11 +248,12 @@ struct IconGenerator {
             .paragraphStyle: paragraph,
         ]
         let badgeText = NSAttributedString(string: "#Request", attributes: attributes)
+        let textSize = badgeText.size()
         let textRect = NSRect(
             x: badgeRect.minX,
-            y: badgeRect.minY + 24,
+            y: badgeRect.midY - (textSize.height / 2),
             width: badgeRect.width,
-            height: badgeRect.height
+            height: textSize.height
         )
         badgeText.draw(in: textRect)
 
