@@ -93,6 +93,22 @@ func verifyMinimumDisplay(_ display: CGDirectDisplayID) -> Bool {
     return false
 }
 
+func setSessionDisplayMode(_ display: CGDirectDisplayID, _ mode: CGDisplayMode) -> CGError {
+    // CGDisplaySetDisplayMode reverts when this helper exits. The test runner is
+    // a separate process, so retain the selected mode for the login session.
+    var configuration: CGDisplayConfigRef?
+    let beginResult = CGBeginDisplayConfiguration(&configuration)
+    guard beginResult == .success, let configuration else { return beginResult == .success ? .failure : beginResult }
+
+    let configureResult = CGConfigureDisplayWithDisplayMode(configuration, display, mode, nil)
+    guard configureResult == .success else {
+        CGCancelDisplayConfiguration(configuration)
+        return configureResult
+    }
+    // Completing consumes the configuration, including when it fails.
+    return CGCompleteDisplayConfiguration(configuration, .forSession)
+}
+
 func configureUsingGuestTools(_ display: CGDirectDisplayID) throws {
     guard ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" else {
         throw DisplaySetupError.message("Guest display utilities are restricted to GitHub Actions.")
@@ -178,9 +194,9 @@ func inspectAndConfigure(checkOnly: Bool) throws {
     }
 
     print("Selecting mode [\(selected.index)] \(selected.logical) logical / \(selected.backing) backing pixels.")
-    let result = CGDisplaySetDisplayMode(display, nativeModes[selected.index], nil)
+    let result = setSessionDisplayMode(display, nativeModes[selected.index])
     if result != .success {
-        print("CGDisplaySetDisplayMode failed with error \(result.rawValue) for \(selected.logical); trying CI guest tools.")
+        print("Session display configuration failed with error \(result.rawValue) for \(selected.logical); trying CI guest tools.")
         return try configureUsingGuestTools(display)
     }
     if verifyMinimumDisplay(display) { return }
