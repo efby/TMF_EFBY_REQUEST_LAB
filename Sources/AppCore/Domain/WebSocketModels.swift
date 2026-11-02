@@ -58,6 +58,7 @@ public struct WebSocketMessageScriptOutcome: Sendable {
     public var updatedLocal: [KeyValueEntry]
     public var logs: [String]
     public var shouldDisconnect: Bool
+    public var scriptError: String?
 
     public init(
         updatedGlobals: [VariableValue],
@@ -67,7 +68,8 @@ public struct WebSocketMessageScriptOutcome: Sendable {
         activeEnvironmentID: UUID? = nil,
         updatedLocal: [KeyValueEntry],
         logs: [String],
-        shouldDisconnect: Bool
+        shouldDisconnect: Bool,
+        scriptError: String? = nil
     ) {
         self.updatedGlobals = updatedGlobals
         self.updatedCollection = updatedCollection
@@ -77,5 +79,6 @@ public struct WebSocketMessageScriptOutcome: Sendable {
         self.updatedLocal = updatedLocal
         self.logs = logs
         self.shouldDisconnect = shouldDisconnect
+        self.scriptError = scriptError
     }
 }

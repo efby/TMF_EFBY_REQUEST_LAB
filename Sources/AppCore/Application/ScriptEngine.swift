@@ -56,15 +56,46 @@ public struct ScriptRuntimeContext: Sendable {
         self.webSocketDoneCause = webSocketDoneCause
         self.webSocketShouldDisconnect = webSocketShouldDisconnect
     }
+
+    fileprivate mutating func setEnvironmentValue(_ value: String, for key: String) {
+        environment[key] = value
+        guard let index = environments.firstIndex(where: { $0.id == activeEnvironmentID }) else { return }
+
+        if let variableIndex = environments[index].variables.lastIndex(where: { $0.key == key && $0.isEnabled })
+            ?? environments[index].variables.lastIndex(where: { $0.key == key }) {
+            environments[index].variables[variableIndex].value = value
+            environments[index].variables[variableIndex].isEnabled = true
+        } else {
+            environments[index].variables.append(VariableValue(key: key, value: value))
+        }
+    }
+
+    fileprivate mutating func unsetEnvironmentValue(for key: String) {
+        environment.removeValue(forKey: key)
+        guard let index = environments.firstIndex(where: { $0.id == activeEnvironmentID }) else { return }
+        environments[index].variables.removeAll { $0.key == key }
+    }
+
+    fileprivate mutating func clearEnvironmentValues() {
+        environment.removeAll()
+        guard let index = environments.firstIndex(where: { $0.id == activeEnvironmentID }) else { return }
+        environments[index].variables.removeAll()
+    }
 }
 
 public struct ScriptExecutionReport: Sendable {
     public var runtime: ScriptRuntimeContext
     public var logs: [String]
+    public var interruption: ScriptExecutionInterruption?
 
-    public init(runtime: ScriptRuntimeContext, logs: [String]) {
+    public init(runtime: ScriptRuntimeContext, logs: [String], interruption: ScriptExecutionInterruption? = nil) {
         self.runtime = runtime
         self.logs = logs
+        self.interruption = interruption
+    }
+
+    public func checkInterruption() throws {
+        try interruption?.checkInterruption()
     }
 }
 
@@ -72,16 +103,28 @@ public struct TemplateExpressionEvaluationReport: Sendable {
     public var value: String?
     public var runtime: ScriptRuntimeContext
     public var logs: [String]
+    public var interruption: ScriptExecutionInterruption?
 
-    public init(value: String?, runtime: ScriptRuntimeContext, logs: [String]) {
+    public init(value: String?, runtime: ScriptRuntimeContext, logs: [String], interruption: ScriptExecutionInterruption? = nil) {
         self.value = value
         self.runtime = runtime
         self.logs = logs
+        self.interruption = interruption
+    }
+
+    public func checkInterruption() throws {
+        try interruption?.checkInterruption()
     }
 }
 
 public struct ScriptEngine: Sendable {
-    public init() {}
+    public let executionTimeLimit: TimeInterval
+
+    public init(executionTimeLimit: TimeInterval = 5) {
+        self.executionTimeLimit = executionTimeLimit.isFinite && executionTimeLimit > 0
+            ? max(0.01, executionTimeLimit)
+            : 5
+    }
 
     public func execute(
         scripts: [ScriptDefinition],
@@ -94,9 +137,19 @@ public struct ScriptEngine: Sendable {
         var logs: [String] = []
 
         for script in scripts where script.listen == event {
-            if isJavaScriptLanguage(script.language),
-               executeJavaScript(script: script, request: request, utilities: utilities, runtime: &workingRuntime, logs: &logs) {
-                continue
+            if Task.isCancelled {
+                return interruptedReport(runtime: runtime, logs: logs, interruption: .cancelled)
+            }
+            if isJavaScriptLanguage(script.language) {
+                var interruption: ScriptExecutionInterruption?
+                let handled = executeJavaScript(
+                    script: script, request: request, utilities: utilities,
+                    runtime: &workingRuntime, logs: &logs, interruption: &interruption
+                )
+                if let interruption {
+                    return interruptedReport(runtime: runtime, logs: logs, interruption: interruption)
+                }
+                if handled { continue }
             }
 
             let lines = script.source.split(whereSeparator: \.isNewline).map {
@@ -117,6 +170,22 @@ public struct ScriptEngine: Sendable {
         }
 
         return ScriptExecutionReport(runtime: workingRuntime, logs: logs)
+    }
+
+    private func interruptedReport(
+        runtime: ScriptRuntimeContext,
+        logs: [String],
+        interruption: ScriptExecutionInterruption
+    ) -> ScriptExecutionReport {
+        var originalRuntime = runtime
+        if runtime.webSocketMessage != nil || runtime.webSocketDoneCause != nil {
+            originalRuntime.webSocketShouldDisconnect = true
+        }
+        return ScriptExecutionReport(
+            runtime: originalRuntime,
+            logs: logs + [interruption.localizedDescription],
+            interruption: interruption
+        )
     }
 
     private func isJavaScriptLanguage(_ language: String) -> Bool {
@@ -237,7 +306,7 @@ public struct ScriptEngine: Sendable {
         case "collection":
             runtime.collection[key] = value
         case "environment":
-            runtime.environment[key] = value
+            runtime.setEnvironmentValue(value, for: key)
         default:
             runtime.local[key] = value
         }
@@ -250,7 +319,7 @@ public struct ScriptEngine: Sendable {
         case "collection":
             runtime.collection.removeValue(forKey: key)
         case "environment":
-            runtime.environment.removeValue(forKey: key)
+            runtime.unsetEnvironmentValue(for: key)
         default:
             runtime.local.removeValue(forKey: key)
         }
@@ -359,7 +428,8 @@ public struct ScriptEngine: Sendable {
           return {
             get: function(key) { return __pmGet(name, key); },
             set: function(key, value) { __pmSet(name, key, value); },
-            unset: function(key) { __pmUnset(name, key); }
+            unset: function(key) { __pmUnset(name, key); },
+            clear: function() { __pmClear(name); }
           };
         }
 
@@ -650,12 +720,13 @@ public struct ScriptEngine: Sendable {
         request: APIRequestModel?,
         utilities: [WorkspaceScriptUtility],
         runtime: inout ScriptRuntimeContext,
-        logs: inout [String]
+        logs: inout [String],
+        interruption: inout ScriptExecutionInterruption?
     ) -> Bool {
         #if canImport(JavaScriptCore)
         guard let context = JSContext() else {
-            logs.append("JavaScript runtime unavailable for script \(script.name).")
-            return false
+            interruption = .watchdogUnavailable
+            return true
         }
 
         let bridge = JavaScriptRuntimeBridge(runtime: runtime, request: request)
@@ -671,6 +742,9 @@ public struct ScriptEngine: Sendable {
         }
         let unsetBlock: @convention(block) (String, String) -> Void = { scope, key in
             bridge.unsetValue(in: scope, for: key)
+        }
+        let clearBlock: @convention(block) (String) -> Void = { scope in
+            bridge.clearValues(in: scope)
         }
         let environmentCreateBlock: @convention(block) (String) -> String = { name in
             bridge.createEnvironment(named: name).uuidString
@@ -845,6 +919,7 @@ public struct ScriptEngine: Sendable {
         context.setObject(getBlock, forKeyedSubscript: "__pmGet" as NSString)
         context.setObject(setBlock, forKeyedSubscript: "__pmSet" as NSString)
         context.setObject(unsetBlock, forKeyedSubscript: "__pmUnset" as NSString)
+        context.setObject(clearBlock, forKeyedSubscript: "__pmClear" as NSString)
         context.setObject(responseCodeBlock, forKeyedSubscript: "__pmResponseCode" as NSString)
         context.setObject(responseTextBlock, forKeyedSubscript: "__pmResponseText" as NSString)
         context.setObject(incomingMessageBlock, forKeyedSubscript: "__pmIncomingMessage" as NSString)
@@ -881,65 +956,75 @@ public struct ScriptEngine: Sendable {
         context.setObject(cryptoAESDecryptECBBlock, forKeyedSubscript: "__cryptoAESDecryptECBNoPadding" as NSString)
         context.setObject(makeRequestObject(from: request, runtime: bridge.runtime), forKeyedSubscript: "request" as NSString)
 
-        setJavaScriptExceptionHandler(
-            for: context,
-            bridge: bridge,
-            sourceName: "JavaScript bootstrap",
-            source: makeJavaScriptBootstrap()
-        )
-        _ = context.evaluateScript(makeJavaScriptBootstrap())
-        for utility in utilities where utility.isEnabled && isJavaScriptLanguage(utility.language) {
+        let result = JavaScriptExecutionWatchdog.run(in: context, timeLimit: executionTimeLimit) { control in
             setJavaScriptExceptionHandler(
                 for: context,
                 bridge: bridge,
-                sourceName: "utility \(utility.name)",
-                source: utility.source
+                sourceName: "JavaScript bootstrap",
+                source: makeJavaScriptBootstrap()
             )
-            _ = context.evaluateScript(utility.source, withSourceURL: URL(fileURLWithPath: "/workspace-utility/\(utility.name).js"))
-            if let alias = utilityNamespaceAliasScript(for: utility) {
+            _ = control.evaluate(makeJavaScriptBootstrap(), in: context)
+            for utility in utilities where utility.isEnabled && isJavaScriptLanguage(utility.language) {
+                guard control.checkInterruption() == nil else { return }
                 setJavaScriptExceptionHandler(
                     for: context,
                     bridge: bridge,
-                    sourceName: "utility \(utility.name) alias",
-                    source: alias
+                    sourceName: "utility \(utility.name)",
+                    source: utility.source
                 )
-                _ = context.evaluateScript(alias)
+                _ = control.evaluate(utility.source, in: context, sourceURL: URL(fileURLWithPath: "/workspace-utility/\(utility.name).js"))
+                if let alias = utilityNamespaceAliasScript(for: utility) {
+                    setJavaScriptExceptionHandler(
+                        for: context,
+                        bridge: bridge,
+                        sourceName: "utility \(utility.name) alias",
+                        source: alias
+                    )
+                    _ = control.evaluate(alias, in: context)
+                }
+            }
+            guard control.checkInterruption() == nil else { return }
+            setJavaScriptExceptionHandler(
+                for: context,
+                bridge: bridge,
+                sourceName: script.name,
+                source: script.source
+            )
+            _ = control.evaluate(script.source, in: context, sourceURL: URL(fileURLWithPath: "/request-script/\(script.name).js"))
+            if control.checkInterruption() == nil,
+               bridge.runtime.webSocketMessage?.isEmpty == false,
+               let handler = bridge.webSocketMessageHandler {
+                setJavaScriptExceptionHandler(
+                    for: context,
+                    bridge: bridge,
+                    sourceName: script.name,
+                    source: script.source
+                )
+                _ = handler.call(withArguments: [bridge.runtime.webSocketMessage ?? ""])
+            }
+            if control.checkInterruption() == nil,
+               bridge.runtime.webSocketDoneCause?.isEmpty == false,
+               let handler = bridge.webSocketDoneHandler {
+                setJavaScriptExceptionHandler(
+                    for: context,
+                    bridge: bridge,
+                    sourceName: script.name,
+                    source: script.source
+                )
+                _ = handler.call(withArguments: [bridge.runtime.webSocketDoneCause ?? ""])
             }
         }
-        setJavaScriptExceptionHandler(
-            for: context,
-            bridge: bridge,
-            sourceName: script.name,
-            source: script.source
-        )
-        _ = context.evaluateScript(script.source, withSourceURL: URL(fileURLWithPath: "/request-script/\(script.name).js"))
-        if bridge.runtime.webSocketMessage?.isEmpty == false,
-           let handler = bridge.webSocketMessageHandler {
-            setJavaScriptExceptionHandler(
-                for: context,
-                bridge: bridge,
-                sourceName: script.name,
-                source: script.source
-            )
-            _ = handler.call(withArguments: [bridge.runtime.webSocketMessage ?? ""])
-        }
-        if bridge.runtime.webSocketDoneCause?.isEmpty == false,
-           let handler = bridge.webSocketDoneHandler {
-            setJavaScriptExceptionHandler(
-                for: context,
-                bridge: bridge,
-                sourceName: script.name,
-                source: script.source
-            )
-            _ = handler.call(withArguments: [bridge.runtime.webSocketDoneCause ?? ""])
-        }
 
-        runtime = bridge.runtime
         logs.append(contentsOf: bridge.logs)
+        if case .failure(let reason) = result {
+            interruption = reason
+        } else {
+            runtime = bridge.runtime
+        }
         return true
         #else
-        logs.append("JavaScriptCore is not available on this platform.")
-        return false
+        interruption = .watchdogUnavailable
+        return true
         #endif
     }
 
@@ -965,7 +1050,10 @@ public struct ScriptEngine: Sendable {
     ) -> TemplateExpressionEvaluationReport? {
         #if canImport(JavaScriptCore)
         guard let context = JSContext() else {
-            return nil
+            return TemplateExpressionEvaluationReport(
+                value: nil, runtime: runtime, logs: [ScriptExecutionInterruption.watchdogUnavailable.localizedDescription],
+                interruption: .watchdogUnavailable
+            )
         }
 
         let bridge = JavaScriptRuntimeBridge(runtime: runtime, request: request)
@@ -986,29 +1074,13 @@ public struct ScriptEngine: Sendable {
             }
         }
         let setBlock: @convention(block) (String, String, Any?) -> Void = { scope, key, value in
-            let text = stringValue(from: value)
-            switch scope {
-            case "globals":
-                bridge.runtime.globals[key] = text
-            case "collection":
-                bridge.runtime.collection[key] = text
-            case "environment":
-                bridge.runtime.environment[key] = text
-            default:
-                bridge.runtime.local[key] = text
-            }
+            bridge.setValue(stringValue(from: value), in: scope, for: key)
         }
         let unsetBlock: @convention(block) (String, String) -> Void = { scope, key in
-            switch scope {
-            case "globals":
-                bridge.runtime.globals.removeValue(forKey: key)
-            case "collection":
-                bridge.runtime.collection.removeValue(forKey: key)
-            case "environment":
-                bridge.runtime.environment.removeValue(forKey: key)
-            default:
-                bridge.runtime.local.removeValue(forKey: key)
-            }
+            bridge.unsetValue(in: scope, for: key)
+        }
+        let clearBlock: @convention(block) (String) -> Void = { scope in
+            bridge.clearValues(in: scope)
         }
         let environmentCreateBlock: @convention(block) (String) -> String = { name in
             bridge.createEnvironment(named: name).uuidString
@@ -1183,6 +1255,7 @@ public struct ScriptEngine: Sendable {
         context.setObject(getBlock, forKeyedSubscript: "__pmGet" as NSString)
         context.setObject(setBlock, forKeyedSubscript: "__pmSet" as NSString)
         context.setObject(unsetBlock, forKeyedSubscript: "__pmUnset" as NSString)
+        context.setObject(clearBlock, forKeyedSubscript: "__pmClear" as NSString)
         context.setObject(responseCodeBlock, forKeyedSubscript: "__pmResponseCode" as NSString)
         context.setObject(responseTextBlock, forKeyedSubscript: "__pmResponseText" as NSString)
         context.setObject(incomingMessageBlock, forKeyedSubscript: "__pmIncomingMessage" as NSString)
@@ -1219,56 +1292,69 @@ public struct ScriptEngine: Sendable {
         context.setObject(cryptoAESDecryptECBBlock, forKeyedSubscript: "__cryptoAESDecryptECBNoPadding" as NSString)
         context.setObject(makeRequestObject(from: request, runtime: bridge.runtime), forKeyedSubscript: "request" as NSString)
 
-        setJavaScriptExceptionHandler(
-            for: context,
-            bridge: bridge,
-            sourceName: "JavaScript bootstrap",
-            source: makeJavaScriptBootstrap()
-        )
-        _ = context.evaluateScript(makeJavaScriptBootstrap())
-        for utility in utilities where utility.isEnabled && isJavaScriptLanguage(utility.language) {
+        let result: Result<String?, ScriptExecutionInterruption> = JavaScriptExecutionWatchdog.run(
+            in: context, timeLimit: executionTimeLimit
+        ) { control in
             setJavaScriptExceptionHandler(
                 for: context,
                 bridge: bridge,
-                sourceName: "utility \(utility.name)",
-                source: utility.source
+                sourceName: "JavaScript bootstrap",
+                source: makeJavaScriptBootstrap()
             )
-            _ = context.evaluateScript(utility.source, withSourceURL: URL(fileURLWithPath: "/workspace-utility/\(utility.name).js"))
-            if let alias = utilityNamespaceAliasScript(for: utility) {
+            _ = control.evaluate(makeJavaScriptBootstrap(), in: context)
+            for utility in utilities where utility.isEnabled && isJavaScriptLanguage(utility.language) {
+                guard control.checkInterruption() == nil else { return nil }
                 setJavaScriptExceptionHandler(
                     for: context,
                     bridge: bridge,
-                    sourceName: "utility \(utility.name) alias",
-                    source: alias
+                    sourceName: "utility \(utility.name)",
+                    source: utility.source
                 )
-                _ = context.evaluateScript(alias)
+                _ = control.evaluate(utility.source, in: context, sourceURL: URL(fileURLWithPath: "/workspace-utility/\(utility.name).js"))
+                if let alias = utilityNamespaceAliasScript(for: utility) {
+                    setJavaScriptExceptionHandler(
+                        for: context,
+                        bridge: bridge,
+                        sourceName: "utility \(utility.name) alias",
+                        source: alias
+                    )
+                    _ = control.evaluate(alias, in: context)
+                }
             }
+
+            guard control.checkInterruption() == nil else { return nil }
+            let wrappedExpression = """
+            (function() {
+                var __pmTemplateValue = (\(expression));
+                if (__pmTemplateValue === undefined || __pmTemplateValue === null) { return ""; }
+                if (typeof __pmTemplateValue === "string") { return __pmTemplateValue; }
+                if (typeof __pmTemplateValue === "object") { return JSON.stringify(__pmTemplateValue); }
+                return String(__pmTemplateValue);
+            })()
+            """
+
+            setJavaScriptExceptionHandler(
+                for: context,
+                bridge: bridge,
+                sourceName: "template expression",
+                source: wrappedExpression
+            )
+            return control.evaluate(wrappedExpression, in: context)?.toString()
         }
-
-        let wrappedExpression = """
-        (function() {
-            var __pmTemplateValue = (\(expression));
-            if (__pmTemplateValue === undefined || __pmTemplateValue === null) { return ""; }
-            if (typeof __pmTemplateValue === "string") { return __pmTemplateValue; }
-            if (typeof __pmTemplateValue === "object") { return JSON.stringify(__pmTemplateValue); }
-            return String(__pmTemplateValue);
-        })()
-        """
-
-        setJavaScriptExceptionHandler(
-            for: context,
-            bridge: bridge,
-            sourceName: "template expression",
-            source: wrappedExpression
-        )
-        let value = context.evaluateScript(wrappedExpression)?.toString()
-        return TemplateExpressionEvaluationReport(
-            value: value,
-            runtime: bridge.runtime,
-            logs: bridge.logs
-        )
+        switch result {
+        case .success(let value):
+            return TemplateExpressionEvaluationReport(value: value, runtime: bridge.runtime, logs: bridge.logs)
+        case .failure(let interruption):
+            return TemplateExpressionEvaluationReport(
+                value: nil, runtime: runtime,
+                logs: bridge.logs + [interruption.localizedDescription], interruption: interruption
+            )
+        }
         #else
-        return nil
+        return TemplateExpressionEvaluationReport(
+            value: nil, runtime: runtime, logs: [ScriptExecutionInterruption.watchdogUnavailable.localizedDescription],
+            interruption: .watchdogUnavailable
+        )
         #endif
     }
 
@@ -1822,8 +1908,7 @@ private final class JavaScriptRuntimeBridge {
         case "collection":
             runtime.collection[key] = value
         case "environment":
-            runtime.environment[key] = value
-            synchronizeActiveEnvironmentVariables()
+            runtime.setEnvironmentValue(value, for: key)
         default:
             runtime.local[key] = value
         }
@@ -1836,10 +1921,22 @@ private final class JavaScriptRuntimeBridge {
         case "collection":
             runtime.collection.removeValue(forKey: key)
         case "environment":
-            runtime.environment.removeValue(forKey: key)
-            synchronizeActiveEnvironmentVariables()
+            runtime.unsetEnvironmentValue(for: key)
         default:
             runtime.local.removeValue(forKey: key)
+        }
+    }
+
+    func clearValues(in scope: String) {
+        switch scope {
+        case "globals":
+            runtime.globals.removeAll()
+        case "collection":
+            runtime.collection.removeAll()
+        case "environment":
+            runtime.clearEnvironmentValues()
+        default:
+            runtime.local.removeAll()
         }
     }
 
@@ -2025,9 +2122,9 @@ private final class JavaScriptRuntimeBridge {
         }
 
         runtime.activeEnvironmentID = environment.id
-        runtime.environment = Dictionary(uniqueKeysWithValues: environment.variables
-            .filter(\.isEnabled)
-            .map { ($0.key, $0.value) })
+        runtime.environment = environment.variables.filter(\.isEnabled).reduce(into: [:]) {
+            $0[$1.key] = $1.value
+        }
         return true
     }
 
@@ -2036,17 +2133,6 @@ private final class JavaScriptRuntimeBridge {
             return nil
         }
         return runtime.environments.first(where: { $0.id == activeEnvironmentID })
-    }
-
-    private func synchronizeActiveEnvironmentVariables() {
-        guard let activeEnvironmentID = runtime.activeEnvironmentID,
-              let environmentIndex = runtime.environments.firstIndex(where: { $0.id == activeEnvironmentID }) else {
-            return
-        }
-
-        runtime.environments[environmentIndex].variables = runtime.environment.keys.sorted().map { key in
-            VariableValue(key: key, value: runtime.environment[key] ?? "", isEnabled: true)
-        }
     }
 
     private func effectiveRequestHeaders() -> [KeyValueEntry] {

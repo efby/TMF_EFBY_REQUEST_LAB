@@ -9,6 +9,7 @@ public final class WorkspacePersistenceCoordinator {
     private let saveWorkspace: SaveWorkspaceUseCase
     private let persistSnapshot: PersistWorkspaceSnapshotUseCase
     private let sharedRepository: any SharedCollectionsRepositoryProtocol
+    private let autosave: WorkspaceAutosaveQueue
 
     public init(
         loadWorkspace: LoadWorkspaceUseCase,
@@ -20,6 +21,10 @@ public final class WorkspacePersistenceCoordinator {
         self.saveWorkspace = saveWorkspace
         self.persistSnapshot = persistSnapshot
         self.sharedRepository = sharedRepository
+        self.autosave = WorkspaceAutosaveQueue { payload, root in
+            try await persistSnapshot(payload, workspaceRoot: root,
+                confirmedLocalSnapshot: Self.preparedPayload(payload).localSnapshot)
+        }
     }
 
     public func loadLocal() async throws -> WorkspaceState {
@@ -27,7 +32,8 @@ public final class WorkspacePersistenceCoordinator {
     }
 
     public func saveLocal(_ state: WorkspaceState) async throws {
-        try await saveWorkspace(state)
+        autosave.enqueue(snapshot: state, workspaceRoot: nil, options: .localOnly, immediately: true)
+        try await autosave.flush()
     }
 
     public func persist(
@@ -35,7 +41,54 @@ public final class WorkspacePersistenceCoordinator {
         workspaceRoot: URL?,
         options: WorkspacePersistenceOptions
     ) async throws {
-        try await persistSnapshot(snapshot, workspaceRoot: workspaceRoot, options: options)
+        autosave.enqueue(snapshot: snapshot, workspaceRoot: workspaceRoot, options: options, immediately: true)
+        try await autosave.flush()
+    }
+
+    func schedulePersistence(snapshot: WorkspaceState, workspaceRoot: URL?, options: WorkspacePersistenceOptions,
+                             immediately: Bool = false, completion: WorkspaceAutosaveQueue.Completion? = nil) {
+        autosave.enqueue(snapshot: snapshot, workspaceRoot: workspaceRoot, options: options,
+                         immediately: immediately, completion: completion)
+    }
+
+    public func flush() async throws { try await autosave.flush() }
+
+    private static func preparedPayload(_ payload: WorkspacePersistencePayload) -> WorkspacePersistencePayload {
+        var prepared = payload
+        let environmentCoordinator = EnvironmentCoordinator()
+        prepared.localSnapshot.requestDrafts = payload.localSnapshot.requestDrafts.compactMap { original in
+            guard original.workspaceName == payload.localSnapshot.activeWorkspaceName else { return original }
+            var draft = original
+            if draft.collectionID == nil, draft.nodeID == nil {
+                draft.persistedRequest = draft.request
+            } else if let collections = payload.collections,
+                      let collection = collections.first(where: { $0.id == draft.collectionID }),
+                      let nodeID = draft.nodeID,
+                      let node = findNode(nodeID, in: collection.items) {
+                draft.persistedRequest = CollectionScriptSupport.mergeScriptsIntoSavedRequest(node: node)
+            }
+            if let environments = payload.environments {
+                let environmentID = draft.selectedEnvironmentID ?? payload.localSnapshot.activeEnvironmentID
+                draft.persistedSelectedEnvironmentID = draft.selectedEnvironmentID
+                draft.persistedEnvironmentVariables = environmentCoordinator.variables(for: environmentID, in: environments)
+            }
+            if draft.collectionID != nil, draft.nodeID != nil,
+               draft.request == draft.persistedRequest,
+               draft.selectedEnvironmentID == draft.persistedSelectedEnvironmentID,
+               environmentCoordinator.variablesEquivalent(draft.pendingEnvironmentVariables, draft.persistedEnvironmentVariables) {
+                return nil
+            }
+            return draft
+        }
+        return prepared
+    }
+
+    private static func findNode(_ id: UUID, in nodes: [CollectionNode]) -> CollectionNode? {
+        for node in nodes {
+            if node.id == id { return node }
+            if let found = findNode(id, in: node.children) { return found }
+        }
+        return nil
     }
 
     public func ensureWorkdirMarker(in repositoryRoot: URL) async throws {

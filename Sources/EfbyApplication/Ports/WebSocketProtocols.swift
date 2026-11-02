@@ -33,7 +33,7 @@ public protocol WebSocketExecutionServiceProtocol: Sendable {
         collectionVariables: [VariableValue],
         environmentVariables: [VariableValue],
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> String
+    ) throws -> String
 
     func resolve(
         _ text: String,
@@ -43,7 +43,7 @@ public protocol WebSocketExecutionServiceProtocol: Sendable {
         localVariables: [KeyValueEntry],
         request: APIRequestModel?,
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> String
+    ) throws -> String
 
     func executeIncomingMessageScripts(
         message: String,

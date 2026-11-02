@@ -23,6 +23,16 @@ targets:
 - Duplicar nodos o flujos debe conservar las relaciones necesarias para seguir ejecutando el workspace.
   - **Verificación**: prueba que clone un subgrafo y ejecute el mismo escenario antes y después de la duplicación con resultados equivalentes.
 
+## Aislamiento de ejecución
+
+- Cambiar o crear un workspace invalida el contexto de las operaciones anteriores y cancela las peticiones, sockets y flujos asociados. Los resultados, errores y checkpoints tardíos no pueden modificar el nuevo workspace.
+- Un workspace vacío permanece vacío: la recuperación de contenido en memoria solo corresponde al mismo origen, nunca a otro workspace.
+- Cada ejecución de una pestaña tiene identidad propia. La terminación o cancelación tardía de un envío anterior no cambia el estado de un envío posterior.
+- Una carga obsoleta no sustituye el contenido ni abre pestañas después de una selección más reciente.
+- Si falla la carga de un workspace, se restaura el último contexto válido y no se guarda un snapshot vacío sobre los archivos del destino.
+- Los flujos iniciados directamente desde el editor también están registrados para recibir cancelación al cambiar de workspace. Las actualizaciones Git descartan datos y mensajes de un contexto anterior.
+- Regresiones en `WorkspaceIsolationTests`: carga vacía/corrupta, selecciones rápidas, resultados HTTP/WS/flow tardíos, cancelación explícita, cierre de pestaña y preparación WS sin bloquear la interfaz.
+
 ## Trazabilidad
 
 | ID | Caso de prueba | Estado |

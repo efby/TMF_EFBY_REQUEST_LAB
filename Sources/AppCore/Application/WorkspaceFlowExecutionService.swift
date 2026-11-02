@@ -76,6 +76,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
         onHighlight: (@Sendable (WorkspaceFlowExecutionHighlightEvent) -> Void)? = nil,
         onVariableCheckpoint: (@Sendable (WorkspaceFlowExecutionVariableCheckpoint) async -> Void)? = nil
     ) async throws -> WorkspaceFlowExecutionResult {
+        try Task.checkCancellation()
         let activeRegistry = WorkspaceFlowActiveRequestRegistry()
         return try await WorkspaceFlowExecutionCancellationScope.$activeRequestRegistry.withValue(activeRegistry) {
             try await withTaskCancellationHandler {
@@ -117,6 +118,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
         do {
         try await withThrowingTaskGroup(of: ProcessedTokenResult.self) { group in
             func enqueue(_ tokens: [Token]) throws {
+                try Task.checkCancellation()
                 for token in tokens {
                     processedTokenCount += 1
                     if processedTokenCount > 2_000 {
@@ -149,6 +151,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
             try enqueue(initialTokens)
 
             while let result = try await group.next() {
+                try Task.checkCancellation()
                 logs.append(contentsOf: result.logs)
                 if let onLog {
                     for entry in result.logs {
@@ -179,6 +182,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         let outgoing = outgoingConnections[joinArrival.nodeID] ?? []
 
                         if let onVariableCheckpoint {
+                            try Task.checkCancellation()
                             await onVariableCheckpoint(variableCheckpoint(from: mergedContext))
                         }
 
@@ -320,6 +324,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         activeEnvironmentID: token.context.activeEnvironmentID,
                         utilityLibraries: utilityLibraries
                     )
+                    try Task.checkCancellation()
 
                     var updatedContext = token.context
                     applyVariableUpdates(
@@ -345,6 +350,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         )
                     ]
                     if let onVariableCheckpoint {
+                        try Task.checkCancellation()
                         await onVariableCheckpoint(variableCheckpoint(from: updatedContext))
                     }
                     result.nextTokens = outgoing.map { Token(nodeID: $0.targetID, context: updatedContext) }
@@ -375,6 +381,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         utilityLibraries: utilityLibraries,
                         onLog: onLog
                     )
+                    try Task.checkCancellation()
                     result.logs.append(contentsOf: socketOutcome.logs)
                     result.logs.append(taskEndMarker)
                     if let onLog {
@@ -390,6 +397,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         )
                     ]
                     if let onVariableCheckpoint {
+                        try Task.checkCancellation()
                         await onVariableCheckpoint(variableCheckpoint(from: socketOutcome.context))
                     }
                     result.nextTokens = outgoing.map { Token(nodeID: $0.targetID, context: socketOutcome.context) }
@@ -436,6 +444,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
             if let selectedConnection {
                 result.logs.append("Decision gateway \(nodeName) selected flow \(selectedConnection.id).")
                 if let onVariableCheckpoint {
+                    try Task.checkCancellation()
                     await onVariableCheckpoint(variableCheckpoint(from: token.context))
                 }
                 result.nextTokens = [Token(nodeID: selectedConnection.targetID, context: token.context)]
@@ -528,6 +537,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
             activeEnvironmentID: updatedContext.activeEnvironmentID,
             utilityLibraries: utilityLibraries
         )
+        try Task.checkCancellation()
 
         logs.append(contentsOf: prepared.logs)
         if let onLog {
@@ -549,6 +559,10 @@ public struct WorkspaceFlowExecutionService: Sendable {
             prepared: prepared,
             request: resolvedRequest.request
         )
+        if Task.isCancelled {
+            await connection.disconnect()
+            throw CancellationError()
+        }
 
         let inFlightRegistry = WorkspaceFlowExecutionCancellationScope.activeRequestRegistry
         inFlightRegistry?.registerWebSocket(connection)
@@ -585,6 +599,8 @@ public struct WorkspaceFlowExecutionService: Sendable {
                     activeEnvironmentID: updatedContext.activeEnvironmentID,
                     utilityLibraries: utilityLibraries
                 )
+                try Task.checkCancellation()
+                if let scriptError = outcome.scriptError { throw AppError.network(scriptError) }
                 applyVariableUpdates(
                     to: &updatedContext,
                     collectionID: resolvedRequest.collectionID,
@@ -617,6 +633,8 @@ public struct WorkspaceFlowExecutionService: Sendable {
                         activeEnvironmentID: updatedContext.activeEnvironmentID,
                         utilityLibraries: utilityLibraries
                     )
+                    try Task.checkCancellation()
+                    if let scriptError = doneOutcome.scriptError { throw AppError.network(scriptError) }
                     applyVariableUpdates(
                         to: &updatedContext,
                         collectionID: resolvedRequest.collectionID,
@@ -653,6 +671,8 @@ public struct WorkspaceFlowExecutionService: Sendable {
                     activeEnvironmentID: updatedContext.activeEnvironmentID,
                     utilityLibraries: utilityLibraries
                 )
+                try Task.checkCancellation()
+                if let scriptError = doneOutcome.scriptError { throw AppError.network(scriptError) }
                 applyVariableUpdates(
                     to: &updatedContext,
                     collectionID: resolvedRequest.collectionID,
@@ -709,6 +729,7 @@ public struct WorkspaceFlowExecutionService: Sendable {
             }
         }
 
+        try Task.checkCancellation()
         logs.append("WebSocket finished without a close event.")
         if let onLog {
             await onLog("WebSocket finished without a close event.")
@@ -731,8 +752,14 @@ public struct WorkspaceFlowExecutionService: Sendable {
         }
 
         return try await withThrowingTaskGroup(of: (any WebSocketConnectionProtocol).self) { group in
+            defer { group.cancelAll() }
             group.addTask {
-                try await webSocketRunner.connect(prepared: prepared, request: request)
+                let connection = try await webSocketRunner.connect(prepared: prepared, request: request)
+                if Task.isCancelled {
+                    await connection.disconnect()
+                    throw CancellationError()
+                }
+                return connection
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
@@ -740,7 +767,10 @@ public struct WorkspaceFlowExecutionService: Sendable {
             }
 
             let result = try await group.next()
-            group.cancelAll()
+            if Task.isCancelled {
+                await result?.disconnect()
+                throw CancellationError()
+            }
             guard let result else {
                 throw AppError.network("WebSocket open timed out.")
             }

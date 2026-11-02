@@ -88,7 +88,7 @@ final class WebSocketExecutionServiceTests: XCTestCase {
         XCTAssertEqual(prepared.updatedRequestHeaders?.first?.value, "trace-123")
     }
 
-    func testResolveOutgoingMessageUsesResolvedVariables() {
+    func testResolveOutgoingMessageUsesResolvedVariables() throws {
         let service = WebSocketExecutionService()
         let request = APIRequestModel(
             name: "Socket",
@@ -98,7 +98,7 @@ final class WebSocketExecutionServiceTests: XCTestCase {
             localVariables: [KeyValueEntry(key: "roomId", value: "alpha")]
         )
 
-        let message = service.resolveOutgoingMessage(
+        let message = try service.resolveOutgoingMessage(
             from: request,
             globals: [VariableValue(key: "token", value: "secret-token")],
             collectionVariables: [],
@@ -108,10 +108,10 @@ final class WebSocketExecutionServiceTests: XCTestCase {
         XCTAssertEqual(message, #"{"event":"join","room":"alpha","token":"secret-token"}"#)
     }
 
-    func testResolveSupportsKeepAliveTemplates() {
+    func testResolveSupportsKeepAliveTemplates() throws {
         let service = WebSocketExecutionService()
 
-        let message = service.resolve(
+        let message = try service.resolve(
             #"{"kind":"keepalive","tenant":"{{tenant}}","room":"{{roomId}}"}"#,
             globals: [VariableValue(key: "tenant", value: "efby")],
             collectionVariables: [],

@@ -25,6 +25,16 @@ targets:
 
 - Fallos de red o TLS deben traducirse en un resultado de ejecución coherente y no dejar el estado de la pestaña incoherente (por ejemplo, bandera de “enviando” sin tarea asociada).
   - **Verificación**: pruebas con respuestas simuladas de error y comprobación del estado publicado al terminar.
+- Una tarea cancelada antes del envío no inicia tráfico. La instalación de la tarea nativa y su cancelación se sincronizan para que no se pierda una cancelación temprana.
+- Una cancelación durante red, espera de reintento o scripts no devuelve éxito ni publica cambios de variables. Los callbacks tardíos completan la espera una sola vez.
+- Regresiones en `RequestCancellationTests` (precancelación, espera de respuesta, reintentos y registro tardío), `ScriptRequestInterruptionTests` (scripts y plantillas sin tráfico ni resultados parciales) y `FlowCancellationIntegrationTests` (cancelación de flujos antes de iniciar y después de respuestas tardías).
+
+## Reutilización de transporte
+
+- Un servicio reutiliza sesiones por validación TLS y versión mínima: como máximo ocho combinaciones. La configuración base, incluida la inyección de protocolos para pruebas, se conserva.
+- Cada tarea tiene su propio diagnóstico; una petición no reutiliza mensajes TLS de otra. Cancelar una petición sólo cancela su tarea nativa.
+- El cierre explícito `invalidate()` es permanente y cierra las sesiones del pool; liberar el servicio también las invalida, sin cerrar la sesión base inyectada.
+- `HTTPTransportReuseTests` verifica concurrencia, políticas separadas, cancelación de una petición sin cortar otra y liberación de recursos. La preparación WebSocket no crea sesiones; cada conexión mantiene su ciclo de vida independiente.
 
 ## Trazabilidad
 

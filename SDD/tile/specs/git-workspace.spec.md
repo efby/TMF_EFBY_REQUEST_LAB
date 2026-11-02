@@ -20,6 +20,15 @@ targets:
 
 ## Trazabilidad
 
+### Credenciales y recuperación
+
+- `origin` y sus URLs de push no guardan usuario/contraseña HTTP. Las URLs antiguas se limpian antes de realizar operaciones de red.
+- Las credenciales se envían por entrada estándar al helper `osxkeychain`, acotadas a URL/ruta/usuario. Se comprueba su recuperación; si falla el llavero, se informa sin restaurar una URL con contraseña.
+- El helper se configura por URL, incluyendo usuario y `useHttpPath`, sin almacenes en texto plano. Las URLs con usuario sin contraseña se limpian; puede ser necesario volver a introducir la autenticación.
+- La salida visible y los errores se redactan antes de publicarse, incluso si un secreto llega dividido en fragmentos. Los datos estructurados internos (rutas y referencias) conservan su contenido.
+- Los directorios `.*.efby-backup` y `.*.efby-staging` no se agregan a commits ni se eliminan como cambios locales ajenos.
+- `GitRepositorySecurityTests` utiliza Git local y un helper simulado: comprueba configuración, entrada estándar, migración de fetch/push, errores del llavero, rutas codificadas, redacción y conservación de respaldos. La autenticación con el llavero real requiere comprobación manual en macOS.
+
 | ID | Caso de prueba | Estado |
 |----|----------------|--------|
 | REQ-GIT-001 | `pullAuthFailureReturnsStructuredError` | Automatizado |

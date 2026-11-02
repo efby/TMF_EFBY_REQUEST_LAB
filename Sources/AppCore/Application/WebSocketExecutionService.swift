@@ -5,10 +5,14 @@ import Security
 public final class WebSocketExecutionService: Sendable {
     private let resolver: VariableResolver
     private let scriptEngine: ScriptEngine
+    typealias SessionFactory = @Sendable (URLSessionConfiguration, any URLSessionDelegate) -> URLSession
+    private let sessionFactory: SessionFactory
+    private let connectionFactory: (@Sendable (URLRequest) -> WebSocketConnection)?
 
     private final class ExpressionEvaluationState {
         var runtime: ScriptRuntimeContext
         var logs: [String] = []
+        var interruption: ScriptExecutionInterruption?
 
         init(runtime: ScriptRuntimeContext) {
             self.runtime = runtime
@@ -21,6 +25,22 @@ public final class WebSocketExecutionService: Sendable {
     ) {
         self.resolver = resolver
         self.scriptEngine = scriptEngine
+        self.connectionFactory = nil
+        self.sessionFactory = { URLSession(configuration: $0, delegate: $1, delegateQueue: nil) }
+    }
+
+    init(connectionFactory: @escaping @Sendable (URLRequest) -> WebSocketConnection) {
+        self.resolver = VariableResolver()
+        self.scriptEngine = ScriptEngine()
+        self.connectionFactory = connectionFactory
+        self.sessionFactory = { URLSession(configuration: $0, delegate: $1, delegateQueue: nil) }
+    }
+
+    init(sessionFactory: @escaping SessionFactory) {
+        self.resolver = VariableResolver()
+        self.scriptEngine = ScriptEngine()
+        self.connectionFactory = nil
+        self.sessionFactory = sessionFactory
     }
 
     private final class RequestSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
@@ -113,6 +133,7 @@ public final class WebSocketExecutionService: Sendable {
         activeEnvironmentID: UUID? = nil,
         utilityLibraries: [WorkspaceScriptUtility] = []
     ) throws -> WebSocketPreparationOutcome {
+        try Task.checkCancellation()
         var logs: [String] = []
         logs.append("URL plantilla: \(request.url)")
         var runtime = ScriptRuntimeContext(
@@ -138,6 +159,8 @@ public final class WebSocketExecutionService: Sendable {
             request: request,
             utilities: utilityLibraries
         )
+        try preRequestReport.checkInterruption()
+        try Task.checkCancellation()
         runtime = preRequestReport.runtime
         logs.append(contentsOf: preRequestReport.logs)
 
@@ -149,22 +172,30 @@ public final class WebSocketExecutionService: Sendable {
         )
 
         let expressionState = ExpressionEvaluationState(runtime: runtime)
-        let urlRequest = try makeURLRequest(
-            request: request,
-            requestHeaders: runtime.requestHeaders,
-            requestQueryItems: runtime.requestQueryItems,
-            context: context,
-            expressionEvaluator: makeExpressionEvaluator(
-                state: expressionState,
+        let urlRequest: URLRequest
+        do {
+            urlRequest = try makeURLRequest(
                 request: request,
-                utilityLibraries: utilityLibraries
+                requestHeaders: runtime.requestHeaders,
+                requestQueryItems: runtime.requestQueryItems,
+                context: context,
+                expressionEvaluator: makeExpressionEvaluator(
+                    state: expressionState,
+                    request: request,
+                    utilityLibraries: utilityLibraries
+                )
             )
-        )
+        } catch {
+            try expressionState.interruption?.checkInterruption()
+            try Task.checkCancellation()
+            throw error
+        }
+        try expressionState.interruption?.checkInterruption()
+        try Task.checkCancellation()
         runtime = expressionState.runtime
         logs.append(contentsOf: expressionState.logs)
         let rawRequest = rawHTTPRepresentation(for: urlRequest)
-        let transport = configuredTransport(for: request)
-        logs.append(contentsOf: transport.logs)
+        logs.append(contentsOf: transportLogs(for: request))
 
         return WebSocketPreparationOutcome(
             urlRequest: urlRequest,
@@ -186,33 +217,49 @@ public final class WebSocketExecutionService: Sendable {
         prepared: WebSocketPreparationOutcome,
         request: APIRequestModel
     ) async throws -> any WebSocketConnectionProtocol {
-        let transport = configuredTransport(for: request)
-        let webSocketTask = transport.session.webSocketTask(with: prepared.urlRequest)
-        webSocketTask.resume()
-
+        try Task.checkCancellation()
+        let connection: WebSocketConnection
+        let diagnosticSession: URLSession?
+        let diagnosticDelegate: RequestSessionDelegate?
+        let nativeTask: URLSessionWebSocketTask?
+        if let connectionFactory {
+            connection = connectionFactory(prepared.urlRequest)
+            diagnosticSession = nil
+            diagnosticDelegate = nil
+            nativeTask = nil
+        } else {
+            let transport = configuredTransport(for: request)
+            let task = transport.session.webSocketTask(with: prepared.urlRequest)
+            connection = WebSocketConnection(session: transport.session, task: task)
+            diagnosticSession = transport.session
+            diagnosticDelegate = transport.delegate
+            nativeTask = task
+        }
         do {
-            try await sendPing(using: webSocketTask)
+            try await connection.open()
+            try Task.checkCancellation()
+            return connection
         } catch {
-            let diagnostic = await describeNetworkError(
-                error,
-                for: prepared.urlRequest,
-                task: webSocketTask,
-                session: transport.session,
-                delegate: transport.delegate
-            )
-            webSocketTask.cancel(with: .goingAway, reason: nil)
-            transport.session.invalidateAndCancel()
+            if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                await connection.disconnect()
+                throw CancellationError()
+            }
+            let diagnostic: String
+            if let diagnosticSession, let diagnosticDelegate {
+                diagnostic = await describeNetworkError(
+                    error,
+                    for: prepared.urlRequest,
+                    task: nativeTask,
+                    session: diagnosticSession,
+                    delegate: diagnosticDelegate
+                )
+            } else {
+                diagnostic = error.localizedDescription
+            }
+            await connection.disconnect()
+            try Task.checkCancellation()
             throw AppError.network(diagnostic)
         }
-
-        return WebSocketConnection(
-            session: transport.session,
-            task: webSocketTask
-        )
-    }
-
-    private func sendPing(using task: URLSessionWebSocketTask) async throws {
-        try await sendPingSafely(using: task)
     }
 
     public func resolveOutgoingMessage(
@@ -221,7 +268,8 @@ public final class WebSocketExecutionService: Sendable {
         collectionVariables: [VariableValue],
         environmentVariables: [VariableValue],
         utilityLibraries: [WorkspaceScriptUtility] = []
-    ) -> String {
+    ) throws -> String {
+        try Task.checkCancellation()
         let context = VariableResolutionContext(
             globals: globals.filter(\.isEnabled),
             collection: collectionVariables.filter(\.isEnabled),
@@ -238,7 +286,7 @@ public final class WebSocketExecutionService: Sendable {
                 local: dictionaryAllowingDuplicateKeys(from: request.localVariables)
             )
         )
-        return resolver.resolve(
+        let value = resolver.resolve(
             request.body.raw,
             context: context,
             expressionEvaluator: makeExpressionEvaluator(
@@ -247,6 +295,9 @@ public final class WebSocketExecutionService: Sendable {
                 utilityLibraries: utilityLibraries
             )
         )
+        try state.interruption?.checkInterruption()
+        try Task.checkCancellation()
+        return value
     }
 
     public func resolve(
@@ -257,7 +308,8 @@ public final class WebSocketExecutionService: Sendable {
         localVariables: [KeyValueEntry],
         request: APIRequestModel? = nil,
         utilityLibraries: [WorkspaceScriptUtility] = []
-    ) -> String {
+    ) throws -> String {
+        try Task.checkCancellation()
         let context = VariableResolutionContext(
             globals: globals.filter(\.isEnabled),
             collection: collectionVariables.filter(\.isEnabled),
@@ -272,7 +324,7 @@ public final class WebSocketExecutionService: Sendable {
                 local: dictionaryAllowingDuplicateKeys(from: localVariables)
             )
         )
-        return resolver.resolve(
+        let value = resolver.resolve(
             text,
             context: context,
             expressionEvaluator: makeExpressionEvaluator(
@@ -281,6 +333,9 @@ public final class WebSocketExecutionService: Sendable {
                 utilityLibraries: utilityLibraries
             )
         )
+        try state.interruption?.checkInterruption()
+        try Task.checkCancellation()
+        return value
     }
 
     public func executeIncomingMessageScripts(
@@ -326,7 +381,8 @@ public final class WebSocketExecutionService: Sendable {
             activeEnvironmentID: report.runtime.activeEnvironmentID,
             updatedLocal: dictionaryToKeyValues(report.runtime.local),
             logs: report.logs,
-            shouldDisconnect: report.runtime.webSocketShouldDisconnect
+            shouldDisconnect: report.interruption != nil || Task.isCancelled || report.runtime.webSocketShouldDisconnect,
+            scriptError: report.interruption?.localizedDescription ?? (Task.isCancelled ? CancellationError().localizedDescription : nil)
         )
     }
 
@@ -373,7 +429,8 @@ public final class WebSocketExecutionService: Sendable {
             activeEnvironmentID: report.runtime.activeEnvironmentID,
             updatedLocal: dictionaryToKeyValues(report.runtime.local),
             logs: report.logs,
-            shouldDisconnect: report.runtime.webSocketShouldDisconnect
+            shouldDisconnect: report.interruption != nil || Task.isCancelled || report.runtime.webSocketShouldDisconnect,
+            scriptError: report.interruption?.localizedDescription ?? (Task.isCancelled ? CancellationError().localizedDescription : nil)
         )
     }
 
@@ -421,12 +478,12 @@ public final class WebSocketExecutionService: Sendable {
             configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
         }
 
-        let configuredSession = URLSession(
-            configuration: configuration,
-            delegate: delegate,
-            delegateQueue: nil
-        )
+        let configuredSession = sessionFactory(configuration, delegate)
 
+        return (configuredSession, delegate, transportLogs(for: request))
+    }
+
+    private func transportLogs(for request: APIRequestModel) -> [String] {
         var logs: [String] = []
         if request.tlsValidationMode == .insecure {
             logs.append("Warning: TLS certificate validation is disabled for this request.")
@@ -434,8 +491,7 @@ public final class WebSocketExecutionService: Sendable {
         if request.minimumTLSVersion != .systemDefault {
             logs.append("TLS minimum version forced to \(request.minimumTLSVersion.displayName).")
         }
-
-        return (configuredSession, delegate, logs)
+        return logs
     }
 
     private func describeNetworkError(
@@ -869,6 +925,7 @@ public final class WebSocketExecutionService: Sendable {
         utilityLibraries: [WorkspaceScriptUtility]
     ) -> (String, VariableResolutionContext) -> String? {
         { expression, _ in
+            guard state.interruption == nil else { return nil }
             guard let report = self.scriptEngine.evaluateTemplateExpressionReport(
                 expression,
                 runtime: state.runtime,
@@ -878,6 +935,10 @@ public final class WebSocketExecutionService: Sendable {
                 return nil
             }
 
+            if let interruption = report.interruption {
+                state.interruption = interruption
+                return nil
+            }
             state.runtime = report.runtime
             state.logs.append(contentsOf: report.logs)
             return report.value
@@ -933,52 +994,153 @@ public final class WebSocketExecutionService: Sendable {
     }
 }
 
-private func sendPingSafely(using task: URLSessionWebSocketTask) async throws {
-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        let oneShot = PingContinuationBox(continuation)
-        task.sendPing { error in
-            if let error {
-                oneShot.resume(with: .failure(error))
-            } else {
-                oneShot.resume(with: .success(()))
-            }
-        }
-    }
+/// Callback transport keeps the native operations testable without a server or real network.
+struct WebSocketTransport: Sendable {
+    let resume: @Sendable () -> Void
+    let ping: @Sendable (@escaping @Sendable (Error?) -> Void) -> Void
+    let send: @Sendable (String, @escaping @Sendable (Error?) -> Void) -> Void
+    let receive: @Sendable (@escaping @Sendable (Result<URLSessionWebSocketTask.Message, Error>) -> Void) -> Void
+    let cancel: @Sendable (URLSessionWebSocketTask.CloseCode) -> Void
+    let invalidate: @Sendable () -> Void
+    let closeDescription: @Sendable () -> String
 }
 
-private final class PingContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Error>?
+private final class WebSocketCallbackState<Value: Sendable>: @unchecked Sendable {
+    // Native adapters and test transports may call their completion synchronously.
+    private let lock = NSRecursiveLock()
+    private var continuation: CheckedContinuation<Value, Error>?
+    private var result: Result<Value, Error>?
 
-    init(_ continuation: CheckedContinuation<Void, Error>) {
+    func start(
+        continuation: CheckedContinuation<Value, Error>,
+        operation: (@escaping @Sendable (Result<Value, Error>) -> Void) -> Void
+    ) {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return
+        }
         self.continuation = continuation
+        operation { self.complete($0) }
+        lock.unlock()
     }
 
-    func resume(with result: Result<Void, Error>) {
+    func complete(_ result: Result<Value, Error>) {
         lock.lock()
+        guard self.result == nil else { lock.unlock(); return }
+        self.result = result
         let continuation = continuation
         self.continuation = nil
         lock.unlock()
+        continuation?.resume(with: result)
+    }
+}
 
-        guard let continuation else { return }
+private final class WebSocketLifetime: @unchecked Sendable {
+    private let lock = NSRecursiveLock()
+    let transport: WebSocketTransport
+    private var closed = false
+    private var pending: [UUID: @Sendable () -> Void] = [:]
 
-        switch result {
-        case .success:
-            continuation.resume()
-        case .failure(let error):
-            continuation.resume(throwing: error)
+    init(transport: WebSocketTransport) { self.transport = transport }
+
+    var isClosed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return closed
+    }
+
+    func operation<Value: Sendable>(
+        _ start: @escaping @Sendable (@escaping @Sendable (Result<Value, Error>) -> Void) -> Void
+    ) async throws -> Value {
+        try Task.checkCancellation()
+        let identifier = UUID()
+        let state = WebSocketCallbackState<Value>()
+        defer { removeOperation(identifier) }
+        let value = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                startOperation(identifier, state: state, continuation: continuation, start: start)
+            }
+        } onCancel: {
+            state.complete(.failure(CancellationError()))
+            self.close(code: .goingAway)
         }
+        try Task.checkCancellation()
+        if isClosed { throw CancellationError() }
+        return value
+    }
+
+    private func startOperation<Value: Sendable>(
+        _ identifier: UUID,
+        state: WebSocketCallbackState<Value>,
+        continuation: CheckedContinuation<Value, Error>,
+        start: (@escaping @Sendable (Result<Value, Error>) -> Void) -> Void
+    ) {
+        lock.lock()
+        if closed {
+            lock.unlock()
+            state.complete(.failure(CancellationError()))
+            state.start(continuation: continuation, operation: start)
+            return
+        }
+        pending[identifier] = { state.complete(.failure(CancellationError())) }
+        state.start(continuation: continuation, operation: start)
+        lock.unlock()
+    }
+
+    private func removeOperation(_ identifier: UUID) {
+        lock.lock()
+        pending.removeValue(forKey: identifier)
+        lock.unlock()
+    }
+
+    func close(code: URLSessionWebSocketTask.CloseCode) {
+        lock.lock()
+        guard !closed else { lock.unlock(); return }
+        closed = true
+        let operations = Array(pending.values)
+        pending.removeAll()
+        lock.unlock()
+        for cancel in operations { cancel() }
+        transport.cancel(code)
+        transport.invalidate()
     }
 }
 
 public actor WebSocketConnection {
-    private let session: URLSession
-    private let task: URLSessionWebSocketTask
-    private var isClosed = false
+    private let lifetime: WebSocketLifetime
+
+    init(transport: WebSocketTransport) {
+        self.lifetime = WebSocketLifetime(transport: transport)
+    }
 
     init(session: URLSession, task: URLSessionWebSocketTask) {
-        self.session = session
-        self.task = task
+        self.lifetime = WebSocketLifetime(transport: WebSocketTransport(
+            resume: { task.resume() },
+            ping: { task.sendPing(pongReceiveHandler: $0) },
+            send: { text, completion in task.send(.string(text), completionHandler: completion) },
+            receive: { task.receive(completionHandler: $0) },
+            cancel: { task.cancel(with: $0, reason: nil) },
+            invalidate: { session.invalidateAndCancel() },
+            closeDescription: {
+                guard task.closeCode != .invalid else { return "" }
+                let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                return "Connection closed (\(task.closeCode.rawValue)\(reason.isEmpty ? "" : " - " + reason))"
+            }
+        ))
+    }
+
+    deinit { lifetime.close(code: .goingAway) }
+
+    func open() async throws {
+        let transport = lifetime.transport
+        let _: Void = try await lifetime.operation { completion in
+            transport.resume()
+            transport.ping { error in
+                if let error { completion(.failure(error)) } else { completion(.success(())) }
+            }
+        }
     }
 
     public func startReceiving(
@@ -986,24 +1148,22 @@ public actor WebSocketConnection {
     ) -> Task<Void, Never> {
         Task {
             while let event = await receiveNextEvent() {
+                guard !Task.isCancelled else { return }
                 await onEvent(event)
                 switch event {
-                case .closed, .failure:
-                    return
-                case .entry:
-                    continue
+                case .closed, .failure: return
+                case .entry: continue
                 }
             }
         }
     }
 
     public func receiveNextEvent() async -> WebSocketReceiveEvent? {
-        guard !Task.isCancelled && !isClosed else {
-            return nil
-        }
-
+        guard !Task.isCancelled && !lifetime.isClosed else { return nil }
         do {
-            let message = try await task.receive()
+            let transport = lifetime.transport
+            let message = try await lifetime.operation { completion in transport.receive(completion) }
+            guard !Task.isCancelled && !lifetime.isClosed else { return nil }
             switch message {
             case .string(let text):
                 return .entry(WebSocketTranscriptEntry(direction: .incoming, body: text))
@@ -1014,60 +1174,32 @@ public actor WebSocketConnection {
                 return .entry(WebSocketTranscriptEntry(direction: .system, body: "Received an unsupported WebSocket frame."))
             }
         } catch {
-            if Task.isCancelled || isClosed {
-                return nil
-            }
-
-            let closeNote = closeDescription()
-            await disconnect(closeCode: .goingAway)
-            if !closeNote.isEmpty {
-                return .closed(closeNote)
-            }
-            return .failure(error.localizedDescription)
+            if Task.isCancelled || lifetime.isClosed { return nil }
+            let closeNote = lifetime.transport.closeDescription()
+            lifetime.close(code: .goingAway)
+            return closeNote.isEmpty ? .failure(error.localizedDescription) : .closed(closeNote)
         }
     }
 
     public func send(text: String) async throws {
-        guard !isClosed else {
-            throw AppError.network("The WebSocket connection is already closed.")
+        let transport = lifetime.transport
+        let _: Void = try await lifetime.operation { completion in
+            transport.send(text) { error in
+                if let error { completion(.failure(error)) } else { completion(.success(())) }
+            }
         }
-        try await task.send(.string(text))
     }
 
     public func sendPing() async throws {
-        guard !isClosed else {
-            throw AppError.network("The WebSocket connection is already closed.")
+        let transport = lifetime.transport
+        let _: Void = try await lifetime.operation { completion in
+            transport.ping { error in
+                if let error { completion(.failure(error)) } else { completion(.success(())) }
+            }
         }
-
-        try await sendPingSafely(using: task)
     }
 
-    public func disconnect() async {
-        await disconnect(closeCode: .normalClosure)
-    }
+    public func disconnect() async { lifetime.close(code: .normalClosure) }
 
-    public func disconnect(closeCode: URLSessionWebSocketTask.CloseCode) async {
-        guard !isClosed else { return }
-        isClosed = true
-        task.cancel(with: closeCode, reason: nil)
-        session.invalidateAndCancel()
-    }
-
-    private func closeDescription() -> String {
-        let closeCode = task.closeCode
-        guard closeCode != .invalid else {
-            return ""
-        }
-
-        let reason: String
-        if let closeReason = task.closeReason,
-           let text = String(data: closeReason, encoding: .utf8),
-           !text.isEmpty {
-            reason = " - \(text)"
-        } else {
-            reason = ""
-        }
-
-        return "Connection closed (\(closeCode.rawValue)\(reason))"
-    }
+    public func disconnect(closeCode: URLSessionWebSocketTask.CloseCode) async { lifetime.close(code: closeCode) }
 }

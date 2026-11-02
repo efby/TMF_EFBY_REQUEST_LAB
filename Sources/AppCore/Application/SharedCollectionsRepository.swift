@@ -26,21 +26,8 @@ public actor SharedCollectionsRepository {
     }
 
     public func loadCollections(from rootDirectory: URL) throws -> [CollectionModel] {
-        let collectionsDirectory = managedCollectionsDirectory(in: rootDirectory)
-        guard fileManager.fileExists(atPath: collectionsDirectory.path) else {
-            return []
-        }
-
-        let files = try fileManager.contentsOfDirectory(
-            at: collectionsDirectory,
-            includingPropertiesForKeys: nil
-        )
-        .filter { $0.pathExtension.lowercased() == "json" }
-        .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-
-        return try files.compactMap { url in
-            let data = try Data(contentsOf: url)
-            return try? codec.importCollection(data: data)
+        try loadManagedJSONFiles(from: managedCollectionsDirectory(in: rootDirectory)) {
+            try codec.importCollection(data: $0)
         }
     }
 
@@ -59,93 +46,45 @@ public actor SharedCollectionsRepository {
     }
 
     public func saveCollections(_ collections: [CollectionModel], to rootDirectory: URL) throws {
-        let collectionsDirectory = managedCollectionsDirectory(in: rootDirectory)
-        if !fileManager.fileExists(atPath: collectionsDirectory.path) {
-            try fileManager.createDirectory(at: collectionsDirectory, withIntermediateDirectories: true)
-        }
-
-        let existingFiles = try fileManager.contentsOfDirectory(
-            at: collectionsDirectory,
-            includingPropertiesForKeys: nil
+        let files = try encodedFiles(
+            collections,
+            fileSuffix: ".postman_collection.json",
+            fallbackBaseName: "collection",
+            name: { $0.info.name },
+            encode: { try codec.export($0) }
         )
-        .filter { $0.pathExtension.lowercased() == "json" }
-
-        for file in existingFiles {
-            try fileManager.removeItem(at: file)
-        }
-
-        var usedFilenames: Set<String> = []
-        for collection in collections {
-            let filename = makeUniqueFilename(
-                for: collection.info.name,
-                usedFilenames: &usedFilenames,
-                fileSuffix: ".postman_collection.json",
-                fallbackBaseName: "collection"
-            )
-            let outputURL = collectionsDirectory.appendingPathComponent(filename)
-            let data = try codec.export(collection)
-            try data.write(to: outputURL, options: .atomic)
+        try replaceManagedJSONFiles(files, in: managedCollectionsDirectory(in: rootDirectory)) {
+            _ = try codec.importCollection(data: $0)
         }
     }
 
     public func saveCollection(_ collection: CollectionModel, to rootDirectory: URL) throws {
-        let collectionsDirectory = managedCollectionsDirectory(in: rootDirectory)
-        if !fileManager.fileExists(atPath: collectionsDirectory.path) {
-            try fileManager.createDirectory(at: collectionsDirectory, withIntermediateDirectories: true)
+        let file = (name: sanitizedFilename(for: collection.info.name), data: try codec.export(collection))
+        try replaceManagedJSONFiles(
+            [file],
+            in: managedCollectionsDirectory(in: rootDirectory),
+            replacingAllJSON: false
+        ) {
+            _ = try codec.importCollection(data: $0)
         }
-
-        let filename = sanitizedFilename(for: collection.info.name)
-        let outputURL = collectionsDirectory.appendingPathComponent(filename)
-        let data = try codec.export(collection)
-        try data.write(to: outputURL, options: .atomic)
     }
 
     public func loadEnvironments(from rootDirectory: URL) throws -> [EnvironmentProfile] {
-        let environmentsDirectory = managedEnvironmentsDirectory(in: rootDirectory)
-        guard fileManager.fileExists(atPath: environmentsDirectory.path) else {
-            return []
-        }
-
-        let files = try fileManager.contentsOfDirectory(
-            at: environmentsDirectory,
-            includingPropertiesForKeys: nil
-        )
-        .filter { $0.pathExtension.lowercased() == "json" }
-        .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-
-        return try files.compactMap { url in
-            let data = try Data(contentsOf: url)
-            return try? environmentCodec.importEnvironment(data: data)
+        try loadManagedJSONFiles(from: managedEnvironmentsDirectory(in: rootDirectory)) {
+            try environmentCodec.importEnvironment(data: $0)
         }
     }
 
     public func saveEnvironments(_ environments: [EnvironmentProfile], to rootDirectory: URL) throws {
-        let environmentsDirectory = managedEnvironmentsDirectory(in: rootDirectory)
-        if !fileManager.fileExists(atPath: environmentsDirectory.path) {
-            try fileManager.createDirectory(at: environmentsDirectory, withIntermediateDirectories: true)
-        }
-
-        let existingFiles = try fileManager.contentsOfDirectory(
-            at: environmentsDirectory,
-            includingPropertiesForKeys: nil
+        let files = try encodedFiles(
+            environments,
+            fileSuffix: ".postman_environment.json",
+            fallbackBaseName: "environment",
+            name: { $0.name },
+            encode: { try environmentCodec.exportEnvironment($0) }
         )
-        .filter { $0.pathExtension.lowercased() == "json" }
-
-        for file in existingFiles {
-            try fileManager.removeItem(at: file)
-        }
-
-        var usedFilenames: Set<String> = []
-        for environment in environments {
-            let filename = makeUniqueFilename(
-                for: environment.name,
-                usedFilenames: &usedFilenames,
-                fileSuffix: ".postman_environment.json",
-                fallbackBaseName: "environment"
-            )
-            let outputURL = environmentsDirectory.appendingPathComponent(filename)
-            let data = try environmentCodec.exportEnvironment(environment)
-            try data.write(to: outputURL, options: .atomic)
+        try replaceManagedJSONFiles(files, in: managedEnvironmentsDirectory(in: rootDirectory)) {
+            _ = try environmentCodec.importEnvironment(data: $0)
         }
     }
 
@@ -201,7 +140,11 @@ public actor SharedCollectionsRepository {
         snapshot.sharedCollectionsDirectoryBookmarkData = nil
 
         let data = try encoder.encode(snapshot)
-        try data.write(to: workspaceSnapshotURL(in: rootDirectory), options: .atomic)
+        let url = workspaceSnapshotURL(in: rootDirectory)
+        if fileManager.fileExists(atPath: url.path), try Data(contentsOf: url) == data {
+            return
+        }
+        try data.write(to: url, options: .atomic)
     }
 
     public func managedCollectionsDirectory(in rootDirectory: URL) -> URL {
@@ -337,6 +280,7 @@ public actor SharedCollectionsRepository {
     }
 
     private func directoryHasJSONFiles(_ directory: URL) throws -> Bool {
+        try recoverManagedDirectory(directory)
         guard fileManager.fileExists(atPath: directory.path) else {
             return false
         }
@@ -346,55 +290,161 @@ public actor SharedCollectionsRepository {
     }
 
     private func loadManagedJSONFiles<T: Decodable>(from directory: URL, as type: T.Type) throws -> [T] {
-        guard fileManager.fileExists(atPath: directory.path) else {
-            return []
-        }
+        try loadManagedJSONFiles(from: directory) { try decoder.decode(type, from: $0) }
+    }
 
-        let files = try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        .filter { $0.pathExtension.lowercased() == "json" }
-        .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-
-        return try files.map { url in
-            let data = try Data(contentsOf: url)
-            return try decoder.decode(T.self, from: data)
+    private func loadManagedJSONFiles<T>(from directory: URL, decode: (Data) throws -> T) throws -> [T] {
+        try recoverManagedDirectory(directory)
+        return try managedJSONFiles(in: directory).map { url in
+            try readManagedJSONFile(at: url, decode: decode)
         }
     }
 
-    private func saveManagedJSONFiles<T: Encodable>(
+    private func managedJSONFiles(in directory: URL) throws -> [URL] {
+        guard fileManager.fileExists(atPath: directory.path) else { return [] }
+        return try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension.lowercased() == "json" }
+            .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+    }
+
+    private func readManagedJSONFile<T>(at url: URL, decode: (Data) throws -> T) throws -> T {
+        do {
+            return try decode(Data(contentsOf: url))
+        } catch {
+            throw AppError.persistence("No se pudo leer el archivo '\(url.path)': \(error.localizedDescription)")
+        }
+    }
+
+    private func saveManagedJSONFiles<T: Codable>(
         _ values: [T],
         to directory: URL,
         fileSuffix: String,
         fallbackBaseName: String,
         name: (T) -> String
     ) throws {
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-
-        let existingFiles = try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
+        let files = try encodedFiles(
+            values,
+            fileSuffix: fileSuffix,
+            fallbackBaseName: fallbackBaseName,
+            name: name,
+            encode: { try encoder.encode($0) }
         )
-        .filter { $0.pathExtension.lowercased() == "json" }
-
-        for file in existingFiles {
-            try fileManager.removeItem(at: file)
+        try replaceManagedJSONFiles(files, in: directory) {
+            _ = try decoder.decode(T.self, from: $0)
         }
+    }
 
+    private func encodedFiles<T>(
+        _ values: [T],
+        fileSuffix: String,
+        fallbackBaseName: String,
+        name: (T) -> String,
+        encode: (T) throws -> Data
+    ) throws -> [(name: String, data: Data)] {
         var usedFilenames: Set<String> = []
-        for value in values {
+        return try values.map { value in
             let filename = makeUniqueFilename(
                 for: name(value),
                 usedFilenames: &usedFilenames,
                 fileSuffix: fileSuffix,
                 fallbackBaseName: fallbackBaseName
             )
-            let outputURL = directory.appendingPathComponent(filename)
-            let data = try encoder.encode(value)
-            try data.write(to: outputURL, options: .atomic)
+            return (filename, try encode(value))
+        }
+    }
+
+    /// Prepare the entire replacement before moving the current directory to a recoverable backup.
+    /// Both renames stay on the same volume. A restart between them restores the previous directory.
+    private func replaceManagedJSONFiles(
+        _ files: [(name: String, data: Data)],
+        in directory: URL,
+        replacingAllJSON: Bool = true,
+        validate: (Data) throws -> Void
+    ) throws {
+        try recoverManagedDirectory(directory)
+        let existingFiles = try managedJSONFiles(in: directory)
+        var existingData: [String: Data] = [:]
+        for url in existingFiles {
+            existingData[url.lastPathComponent] = try readManagedJSONFile(at: url) { data in
+                try validate(data)
+                return data
+            }
+        }
+        // Byte-identical incoming data has already been validated from the current file.
+        for file in files where existingData[file.name] != file.data {
+            try validate(file.data)
+        }
+
+        let hadPreviousDirectory = fileManager.fileExists(atPath: directory.path)
+        if hadPreviousDirectory {
+            let properties = try directory.resourceValues(forKeys: [.isSymbolicLinkKey])
+            guard properties.isSymbolicLink != true else {
+                throw AppError.persistence("No se puede reemplazar el directorio enlazado '\(directory.path)'.")
+            }
+        }
+
+        let staging = transactionDirectory(for: directory, suffix: "staging")
+        let backup = transactionDirectory(for: directory, suffix: "backup")
+        // A remaining backup alongside the validated current directory belongs to a completed save.
+        if fileManager.fileExists(atPath: backup.path) {
+            try fileManager.removeItem(at: backup)
+        }
+        if fileManager.fileExists(atPath: staging.path) {
+            try fileManager.removeItem(at: staging)
+        }
+        let sameFilenames = !replacingAllJSON || existingData.count == files.count
+        if hadPreviousDirectory, sameFilenames, files.allSatisfy({ existingData[$0.name] == $0.data }) {
+            return
+        }
+        defer { try? fileManager.removeItem(at: staging) }
+
+        if hadPreviousDirectory {
+            // Keep non-JSON files and subdirectories in the managed directory unchanged.
+            try fileManager.copyItem(at: directory, to: staging)
+        } else {
+            try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+        }
+        if replacingAllJSON {
+            let incomingNames = Set(files.map { $0.name })
+            for url in existingFiles where !incomingNames.contains(url.lastPathComponent) {
+                try fileManager.removeItem(at: staging.appendingPathComponent(url.lastPathComponent))
+            }
+        }
+        for file in files where existingData[file.name] != file.data {
+            try file.data.write(to: staging.appendingPathComponent(file.name), options: .atomic)
+        }
+
+        if hadPreviousDirectory {
+            try fileManager.moveItem(at: directory, to: backup)
+        }
+        do {
+            try fileManager.moveItem(at: staging, to: directory)
+        } catch {
+            if hadPreviousDirectory {
+                do {
+                    try fileManager.moveItem(at: backup, to: directory)
+                } catch let recoveryError {
+                    throw AppError.persistence(
+                        "No se pudo completar el guardado: \(error.localizedDescription). "
+                            + "La copia anterior se conserva en '\(backup.path)' para recuperarla: \(recoveryError.localizedDescription)"
+                    )
+                }
+            }
+            throw error
+        }
+        // Failure to remove an obsolete backup must not turn an installed save into a failure.
+        try? fileManager.removeItem(at: backup)
+    }
+
+    private func transactionDirectory(for directory: URL, suffix: String) -> URL {
+        directory.deletingLastPathComponent()
+            .appendingPathComponent(".\(directory.lastPathComponent).efby-\(suffix)", isDirectory: true)
+    }
+
+    private func recoverManagedDirectory(_ directory: URL) throws {
+        let backup = transactionDirectory(for: directory, suffix: "backup")
+        if !fileManager.fileExists(atPath: directory.path), fileManager.fileExists(atPath: backup.path) {
+            try fileManager.moveItem(at: backup, to: directory)
         }
     }
 

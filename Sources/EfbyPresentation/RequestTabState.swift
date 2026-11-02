@@ -29,10 +29,14 @@ public final class RequestTabState: ObservableObject, Identifiable {
 
     public var sourceCollectionID: UUID?
     public var sourceNodeID: UUID?
+    /// Invalidates results and callbacks from a previous execution on the same tab.
+    var executionID = UUID()
+    var isWebSocketMessageInFlight = false
     public var task: Task<Void, Never>?
     public var webSocketReceiveTask: Task<Void, Never>?
     public var webSocketPingTask: Task<Void, Never>?
     public var webSocketKeepAliveTask: Task<Void, Never>?
+    public var webSocketSendTask: Task<Void, Never>?
     public var webSocketConnection: (any WebSocketConnectionProtocol)?
     public var webSocketReconnectAttempt: Int = 0
 
@@ -89,5 +93,6 @@ public final class RequestTabState: ObservableObject, Identifiable {
         webSocketReceiveTask?.cancel()
         webSocketPingTask?.cancel()
         webSocketKeepAliveTask?.cancel()
+        webSocketSendTask?.cancel()
     }
 }

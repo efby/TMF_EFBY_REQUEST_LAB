@@ -17,13 +17,14 @@
 | [metodologia-sdd.md](metodologia-sdd.md) | Specification-Driven Development y las 10 specs |
 | [metodologia-tdd.md](metodologia-tdd.md) | Test-Driven Development, suites y CI |
 | [traceability-matrix.md](traceability-matrix.md) | Requisito → spec → test (36 REQ-*) |
-| [plan-pruebas.md](plan-pruebas.md) | Tipos de prueba y checklist manual |
+| [plan-pruebas.md](plan-pruebas.md) | Suites del núcleo, pruebas de interfaz macOS y checklist manual |
 
 ## Operación
 
 | Documento | Contenido |
 |-----------|-----------|
 | [despliegue.md](despliegue.md) | Build, DMG, releases y firma |
+| [rendimiento.md](rendimiento.md) | Autoguardado, sesiones y mediciones comparadas de la entrega 3 |
 
 ## Decisiones de arquitectura (ADR)
 

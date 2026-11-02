@@ -2,6 +2,15 @@ import Foundation
 
 public actor GitRepositoryService {
     private static let protectedWorkdirMarkerNames: Set<String> = ["_directoritrabajo", ".directoritrabajo"]
+    private static let recoveryExclusions = [":(exclude,glob)**/.*.efby-backup/**", ":(exclude,glob)**/.*.efby-staging/**"]
+    private nonisolated static func isProtectedWorkdirPath(_ path: String) -> Bool {
+        protectedWorkdirMarkerNames.contains(path) || path.split(separator: "/").contains {
+            $0.hasPrefix(".") && ($0.hasSuffix(".efby-backup") || $0.hasSuffix(".efby-staging"))
+        }
+    }
+    private let processExecutableURL: URL
+    private let processEnvironment: [String: String]?
+    private var sensitiveValues: Set<String> = []
 
     #if os(macOS)
     private final class GitProcessOutputState: @unchecked Sendable {
@@ -31,7 +40,15 @@ public actor GitRepositoryService {
     }
     #endif
 
-    public init() {}
+    public init() {
+        processExecutableURL = URL(fileURLWithPath: "/usr/bin/env")
+        processEnvironment = nil
+    }
+
+    init(processExecutableURL: URL, environment: [String: String]) {
+        self.processExecutableURL = processExecutableURL
+        self.processEnvironment = environment
+    }
 
     public func status(
         at repositoryURL: URL,
@@ -85,7 +102,7 @@ public actor GitRepositoryService {
         let combined = unstaged + staged + untracked
         var seen = Set<String>()
         return combined
-            .filter { !Self.protectedWorkdirMarkerNames.contains($0) }
+            .filter { !Self.isProtectedWorkdirPath($0) }
             .filter { seen.insert($0).inserted }
     }
 
@@ -107,7 +124,7 @@ public actor GitRepositoryService {
             at: repositoryURL,
             failureMessage: "Unable to inspect untracked local files."
         )
-        .filter { !Self.protectedWorkdirMarkerNames.contains($0) }
+        .filter { !Self.isProtectedWorkdirPath($0) }
 
         if !untracked.isEmpty {
             var cleanArguments = ["clean", "-fd", "--"]
@@ -143,6 +160,7 @@ public actor GitRepositoryService {
         at repositoryURL: URL,
         onOutput: GitOutputHandler? = nil
     ) async throws -> GitCommandResult {
+        _ = try await migrateOriginCredentials(at: repositoryURL)
         emit("Fetching remote changes from origin...\n", to: onOutput)
         let fetchResult = try await runGit(
             arguments: ["fetch", "origin"],
@@ -210,7 +228,7 @@ public actor GitRepositoryService {
     ) async throws -> GitCommandResult {
         emit("Stashing local changes (including untracked)...\n", to: onOutput)
         return try await runGit(
-            arguments: ["stash", "push", "-u", "-m", message],
+            arguments: ["stash", "push", "-u", "-m", message, "--", "."] + Self.recoveryExclusions,
             at: repositoryURL,
             onOutput: onOutput
         )
@@ -384,7 +402,7 @@ public actor GitRepositoryService {
             at: repositoryURL,
             failureMessage: "Unable to inspect untracked local files."
         )
-        .filter { !Self.protectedWorkdirMarkerNames.contains($0) }
+        .filter { !Self.isProtectedWorkdirPath($0) }
 
         if !untracked.isEmpty {
             var cleanArguments = ["clean", "-fd", "--"]
@@ -434,8 +452,9 @@ public actor GitRepositoryService {
             "Git commit/push no está disponible en iPhone o iPad. Usa la app para Mac para subir cambios al remoto."
         )
 #else
+        _ = try await migrateOriginCredentials(at: repositoryURL)
         emit("Staging repository changes...\n", to: onOutput)
-        _ = try await runGit(arguments: ["add", "."], at: repositoryURL, onOutput: onOutput)
+        _ = try await runGit(arguments: ["add", "--", "."] + Self.recoveryExclusions, at: repositoryURL, onOutput: onOutput)
 
         emit("Creating commit...\n", to: onOutput)
         let commit = try await runGit(
@@ -460,6 +479,7 @@ public actor GitRepositoryService {
 
     public func configureRepository(at repositoryURL: URL, remoteInput: String) async throws -> GitCommandResult {
         let configuration = try normalizeRemoteInput(remoteInput)
+        let remoteURL = displayRemoteURL(configuration.remoteURL)
         var messages: [String] = []
 
         if !FileManager.default.fileExists(atPath: repositoryURL.appendingPathComponent(".git").path) {
@@ -473,17 +493,21 @@ public actor GitRepositoryService {
             }
         }
 
-        let existingRemote = try await runGit(arguments: ["remote", "get-url", "origin"], at: repositoryURL, allowFailure: true)
-        if existingRemote.exitCode == 0 {
-            let update = try await runGit(arguments: ["remote", "set-url", "origin", configuration.remoteURL], at: repositoryURL)
+        let existingRemote = try await migrateOriginCredentials(at: repositoryURL)
+        if existingRemote != nil {
+            let update = try await runGit(arguments: ["remote", "set-url", "origin", remoteURL], at: repositoryURL)
             if !update.output.isEmpty {
                 messages.append(update.output)
             }
         } else {
-            let add = try await runGit(arguments: ["remote", "add", "origin", configuration.remoteURL], at: repositoryURL)
+            let add = try await runGit(arguments: ["remote", "add", "origin", remoteURL], at: repositoryURL)
             if !add.output.isEmpty {
                 messages.append(add.output)
             }
+        }
+
+        if let credentials = embeddedCredentials(in: configuration.remoteURL) {
+            try await storeCredentials(credentials, for: remoteURL, at: repositoryURL)
         }
 
         let fetch = try await runGit(arguments: ["fetch", "origin"], at: repositoryURL, allowFailure: true)
@@ -491,7 +515,7 @@ public actor GitRepositoryService {
             messages.append(fetch.output)
         }
 
-        messages.append("Configured Git remote origin -> \(configuration.remoteURL)")
+        messages.append("Configured Git remote origin -> \(remoteURL)")
         return GitCommandResult(output: messages.joined(separator: "\n"), exitCode: 0)
     }
 
@@ -526,7 +550,8 @@ public actor GitRepositoryService {
         let provider = provider(for: configuration.remoteURL)
         let authKind = authenticationKind(for: configuration.remoteURL)
         var messages: [String] = []
-        let effectiveRemoteURL = try credentials.map { try applyCredentials($0, to: configuration.remoteURL, provider: provider) } ?? configuration.remoteURL
+        let effectiveRemoteURL = displayRemoteURL(configuration.remoteURL)
+        let suppliedCredentials = credentials ?? embeddedCredentials(in: configuration.remoteURL)
         let didInitializeRepository = !FileManager.default.fileExists(atPath: repositoryURL.appendingPathComponent(".git").path)
 
         emit("Preparing local repository...\n", to: onOutput)
@@ -549,9 +574,9 @@ public actor GitRepositoryService {
         }
 
         emit("Configuring remote origin...\n", to: onOutput)
-        let existingRemote = try await runGit(arguments: ["remote", "get-url", "origin"], at: repositoryURL, allowFailure: true, onOutput: onOutput)
-        if existingRemote.exitCode == 0 {
-            if existingRemote.output != effectiveRemoteURL {
+        let existingRemote = try await migrateOriginCredentials(at: repositoryURL)
+        if let existingRemote {
+            if existingRemote != effectiveRemoteURL {
                 _ = try await runGit(arguments: ["remote", "set-url", "origin", effectiveRemoteURL], at: repositoryURL, onOutput: onOutput)
                 messages.append("Updated remote origin to \(displayRemoteURL(configuration.remoteURL)).")
             } else {
@@ -560,6 +585,10 @@ public actor GitRepositoryService {
         } else {
             _ = try await runGit(arguments: ["remote", "add", "origin", effectiveRemoteURL], at: repositoryURL, onOutput: onOutput)
             messages.append("Added remote origin -> \(displayRemoteURL(configuration.remoteURL)).")
+        }
+
+        if let suppliedCredentials {
+            try await storeCredentials(suppliedCredentials, for: effectiveRemoteURL, at: repositoryURL)
         }
 
         emit("Validating remote access...\n", to: onOutput)
@@ -732,29 +761,30 @@ public actor GitRepositoryService {
         }
     }
 
-    private func remoteDefaultBranch(at repositoryURL: URL) async throws -> String? {
+    func remoteDefaultBranch(at repositoryURL: URL) async throws -> String? {
         let symrefResult = try await runGit(
             arguments: ["ls-remote", "--symref", "origin", "HEAD"],
             at: repositoryURL,
-            allowFailure: true
+            allowFailure: true,
+            redactsOutput: false
         )
         if symrefResult.exitCode == 0,
            let branch = parseRemoteDefaultBranch(from: symrefResult.output) {
             return branch
         }
 
-        let remoteShow = try await runGit(arguments: ["remote", "show", "origin"], at: repositoryURL, allowFailure: true)
+        let remoteShow = try await runGit(arguments: ["remote", "show", "origin"], at: repositoryURL, allowFailure: true, redactsOutput: false)
         if remoteShow.exitCode == 0,
            let branch = parseRemoteDefaultBranch(fromRemoteShow: remoteShow.output) {
             return branch
         }
 
-        let mainHead = try await runGit(arguments: ["ls-remote", "--heads", "origin", "main"], at: repositoryURL, allowFailure: true)
+        let mainHead = try await runGit(arguments: ["ls-remote", "--heads", "origin", "main"], at: repositoryURL, allowFailure: true, redactsOutput: false)
         if mainHead.exitCode == 0, !mainHead.output.isEmpty {
             return "main"
         }
 
-        let masterHead = try await runGit(arguments: ["ls-remote", "--heads", "origin", "master"], at: repositoryURL, allowFailure: true)
+        let masterHead = try await runGit(arguments: ["ls-remote", "--heads", "origin", "master"], at: repositoryURL, allowFailure: true, redactsOutput: false)
         if masterHead.exitCode == 0, !masterHead.output.isEmpty {
             return "master"
         }
@@ -800,11 +830,91 @@ public actor GitRepositoryService {
     }
 
     public func remoteURL(at repositoryURL: URL) async throws -> String? {
-        let result = try await runGit(arguments: ["remote", "get-url", "origin"], at: repositoryURL, allowFailure: true)
-        guard result.exitCode == 0 else {
-            return nil
+        try await migrateOriginCredentials(at: repositoryURL)
+    }
+
+    private func migrateOriginCredentials(at repositoryURL: URL) async throws -> String? {
+        var originURL: String?
+        var migrations: [(String, GitCredentialInput)] = []
+        for key in ["remote.origin.url", "remote.origin.pushurl"] {
+            // These private reads must never stream credential-bearing values to the UI.
+            let result = try await runGit(arguments: ["config", "--local", "--get-all", key], at: repositoryURL,
+                                          allowFailure: true, redactsOutput: false)
+            guard result.exitCode == 0 else { continue }
+            let originals = result.output.components(separatedBy: "\n").filter { !$0.isEmpty }
+            let cleanURLs = originals.map(displayRemoteURL)
+            if key == "remote.origin.url" { originURL = cleanURLs.first }
+            guard originals != cleanURLs, let firstURL = cleanURLs.first else { continue }
+            for (original, clean) in zip(originals, cleanURLs) {
+                if let credentials = embeddedCredentials(in: original) {
+                    sensitiveValues.insert(credentials.secret)
+                    migrations.append((clean, credentials))
+                }
+            }
+            _ = try await runGit(arguments: ["config", "--local", "--replace-all", key, firstURL], at: repositoryURL)
+            for extra in cleanURLs.dropFirst() {
+                _ = try await runGit(arguments: ["config", "--local", "--add", key, extra], at: repositoryURL)
+            }
         }
-        return result.output.isEmpty ? nil : result.output
+        // Remove every stored URL credential before a keychain failure can interrupt migration.
+        for (remote, credentials) in migrations {
+            try await storeCredentials(credentials, for: remote, at: repositoryURL)
+        }
+        return originURL
+    }
+
+    private nonisolated func embeddedCredentials(in remoteURL: String) -> GitCredentialInput? {
+        guard let components = URLComponents(string: remoteURL),
+              ["https", "http"].contains(components.scheme?.lowercased() ?? ""),
+              let password = components.password, !password.isEmpty else { return nil }
+        return GitCredentialInput(mode: .usernamePassword, username: components.user ?? "", secret: password)
+    }
+
+    private func storeCredentials(_ credentials: GitCredentialInput, for remoteURL: String, at repositoryURL: URL) async throws {
+        let authenticatedURL = try applyCredentials(credentials, to: remoteURL, provider: provider(for: remoteURL))
+        guard let components = URLComponents(string: authenticatedURL),
+              let rawScheme = components.scheme, let host = components.host,
+              let username = components.user, let password = components.password else {
+            throw AppError.persistence("Unable to prepare Git credentials for the system keychain.")
+        }
+        let scheme = rawScheme.lowercased()
+        let fields = [scheme, host, components.path, username, password]
+        guard !fields.contains(where: { $0.contains("\n") || $0.contains("\r") || $0.contains("\0") }) else {
+            throw AppError.persistence("Git credentials must not contain line breaks or null characters.")
+        }
+        sensitiveValues.insert(password)
+        if let encoded = components.percentEncodedPassword { sensitiveValues.insert(encoded) }
+
+        // URL-scoped helpers override plaintext user-level stores without changing other remotes.
+        let helperKey = "credential.\(remoteURL).helper"
+        _ = try await runGit(arguments: ["config", "--local", "--replace-all", helperKey, ""], at: repositoryURL)
+        _ = try await runGit(arguments: ["config", "--local", "--add", helperKey, "osxkeychain"], at: repositoryURL)
+        _ = try await runGit(arguments: ["config", "--local", "credential.\(remoteURL).useHttpPath", "true"], at: repositoryURL)
+        _ = try await runGit(arguments: ["config", "--local", "credential.\(remoteURL).username", username], at: repositoryURL)
+
+        let authority = host + (components.port.map { ":\($0)" } ?? "")
+        let identity = "protocol=\(scheme)\nhost=\(authority)\npath=\(components.path.dropFirst())\nusername=\(username)\n"
+        let helperOptions = ["-c", "credential.helper=", "-c", "credential.helper=osxkeychain", "-c", "credential.useHttpPath=true"]
+        _ = try await runGit(arguments: helperOptions + ["credential", "approve"], at: repositoryURL,
+                             standardInput: Data((identity + "password=\(password)\n\n").utf8))
+        // Git approve can succeed even when a helper failed. Verify storage without exposing its reply.
+        let stored = try await runGit(arguments: helperOptions + ["credential", "fill"], at: repositoryURL,
+                                      allowFailure: true, standardInput: Data((identity + "\n").utf8), redactsOutput: false)
+        guard stored.exitCode == 0, stored.output.components(separatedBy: "\n").contains("password=\(password)") else {
+            throw AppError.persistence("Git credentials could not be saved in the system keychain. The remote URL contains no password; reconnect to try again.")
+        }
+    }
+
+    nonisolated static func redactedOutput(_ output: String, sensitiveValues: Set<String> = []) -> String {
+        var safe = output
+        // Redact the complete output, so a secret split across pipe chunks cannot escape.
+        if let regex = try? NSRegularExpression(pattern: "(?i)(https?://)[^\\s/@]+@") {
+            safe = regex.stringByReplacingMatches(in: safe, range: NSRange(safe.startIndex..., in: safe), withTemplate: "$1[REDACTED]@")
+        }
+        for value in sensitiveValues.filter({ !$0.isEmpty }).sorted(by: { $0.count > $1.count }) {
+            safe = safe.replacingOccurrences(of: value, with: "[REDACTED]")
+        }
+        return safe
     }
 
     public nonisolated func normalizeRemoteInput(_ input: String) throws -> GitRemoteConfiguration {
@@ -889,10 +999,11 @@ public actor GitRepositoryService {
     }
 
     public nonisolated func authenticationKind(for remoteURL: String) -> GitAuthenticationKind {
-        if remoteURL.hasPrefix("git@") || remoteURL.hasPrefix("ssh://") {
+        let lowercased = remoteURL.lowercased()
+        if lowercased.hasPrefix("git@") || lowercased.hasPrefix("ssh://") {
             return .ssh
         }
-        if remoteURL.hasPrefix("https://") || remoteURL.hasPrefix("http://") {
+        if lowercased.hasPrefix("https://") || lowercased.hasPrefix("http://") {
             return .https
         }
         return .unknown
@@ -952,7 +1063,7 @@ public actor GitRepositoryService {
     }
 
     public nonisolated func displayRemoteURL(_ remoteURL: String) -> String {
-        guard var components = URLComponents(string: remoteURL), components.scheme?.hasPrefix("http") == true else {
+        guard var components = URLComponents(string: remoteURL), ["http", "https"].contains(components.scheme?.lowercased() ?? "") else {
             return remoteURL
         }
         components.user = nil
@@ -1080,7 +1191,7 @@ public actor GitRepositoryService {
         provider: GitProvider
     ) throws -> String {
         guard var components = URLComponents(string: remoteURL),
-              components.scheme?.hasPrefix("http") == true else {
+              ["http", "https"].contains(components.scheme?.lowercased() ?? "") else {
             throw AppError.persistence("Credential form is only available for HTTPS Git remotes. Use the web URL of the repository if you want token or password authentication.")
         }
 
@@ -1142,14 +1253,16 @@ public actor GitRepositoryService {
 
     private nonisolated func emit(_ chunk: String, to onOutput: GitOutputHandler?) {
         guard !chunk.isEmpty else { return }
-        onOutput?(chunk)
+        onOutput?(Self.redactedOutput(chunk))
     }
 
     private func runGit(
         arguments: [String],
         at repositoryURL: URL,
         allowFailure: Bool = false,
-        onOutput: GitOutputHandler? = nil
+        onOutput: GitOutputHandler? = nil,
+        standardInput: Data? = nil,
+        redactsOutput: Bool = true
     ) async throws -> GitCommandResult {
         #if !os(macOS)
         let message =
@@ -1159,24 +1272,34 @@ public actor GitRepositoryService {
         }
         throw AppError.persistence(message)
         #else
-        try await withCheckedThrowingContinuation { continuation in
+        let executableURL = processExecutableURL
+        var environment = processEnvironment ?? ProcessInfo.processInfo.environment
+        environment["GIT_TERMINAL_PROMPT"] = "0"
+        let secrets = sensitiveValues
+        return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
             let state = GitProcessOutputState()
 
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.executableURL = executableURL
+            process.environment = environment
             process.arguments = ["git"] + arguments
             process.currentDirectoryURL = repositoryURL
             process.standardOutput = outputPipe
             process.standardError = errorPipe
+            let inputPipe = standardInput.map { _ in Pipe() }
+            if let inputPipe {
+                process.standardInput = inputPipe
+            } else {
+                process.standardInput = FileHandle.nullDevice
+            }
 
             let appendData: @Sendable (Data) -> Void = { data in
                 guard !data.isEmpty else { return }
                 let chunk = String(decoding: data, as: UTF8.self)
                 guard !chunk.isEmpty else { return }
                 state.append(chunk)
-                onOutput?(chunk)
             }
 
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
@@ -1197,15 +1320,6 @@ public actor GitRepositoryService {
                 appendData(data)
             }
 
-            do {
-                try process.run()
-            } catch {
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(throwing: AppError.persistence("No se pudo ejecutar git: \(error.localizedDescription)"))
-                return
-            }
-
             process.terminationHandler = { process in
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
@@ -1213,15 +1327,33 @@ public actor GitRepositoryService {
                 appendData(outputPipe.fileHandleForReading.readDataToEndOfFile())
                 appendData(errorPipe.fileHandleForReading.readDataToEndOfFile())
 
-                let output = state.trimmedOutput()
+                let rawOutput = state.trimmedOutput()
+                let safeOutput = Self.redactedOutput(rawOutput, sensitiveValues: secrets)
+                let structuredRead = ["diff", "ls-files", "rev-parse", "rev-list", "symbolic-ref"].contains(arguments.first ?? "")
+                let output = redactsOutput && !structuredRead ? safeOutput : rawOutput
                 let result = GitCommandResult(output: output, exitCode: process.terminationStatus)
 
                 guard state.markResumed() else { return }
+                if !safeOutput.isEmpty { onOutput?(safeOutput + "\n") }
                 if process.terminationStatus == 0 || allowFailure {
                     continuation.resume(returning: result)
                 } else {
-                    continuation.resume(throwing: AppError.persistence(output.isEmpty ? "Git fallo con codigo \(process.terminationStatus)." : output))
+                    continuation.resume(throwing: AppError.persistence(safeOutput.isEmpty ? "Git fallo con codigo \(process.terminationStatus)." : safeOutput))
                 }
+            }
+            do {
+                try process.run()
+                if let standardInput, let inputPipe {
+                    try inputPipe.fileHandleForWriting.write(contentsOf: standardInput)
+                    try inputPipe.fileHandleForWriting.close()
+                }
+            } catch {
+                if process.isRunning { process.terminate() }
+                outputPipe.fileHandleForReading.readabilityHandler = nil
+                errorPipe.fileHandleForReading.readabilityHandler = nil
+                guard state.markResumed() else { return }
+                let safeError = Self.redactedOutput(error.localizedDescription, sensitiveValues: secrets)
+                continuation.resume(throwing: AppError.persistence("No se pudo ejecutar git: \(safeError)"))
             }
         }
         #endif

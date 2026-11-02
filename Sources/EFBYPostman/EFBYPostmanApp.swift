@@ -11,15 +11,16 @@ final class EFBYPostmanAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !isTerminationInProgress, let viewModel else {
+        if isTerminationInProgress { return .terminateLater }
+        guard let viewModel else {
             return .terminateNow
         }
 
         isTerminationInProgress = true
         Task { @MainActor [weak self, weak viewModel] in
-            await viewModel?.flushStateForApplicationTermination()
-            sender.reply(toApplicationShouldTerminate: true)
+            let saved = await viewModel?.flushStateForApplicationTermination() ?? true
             self?.isTerminationInProgress = false
+            sender.reply(toApplicationShouldTerminate: saved)
         }
         return .terminateLater
     }
@@ -28,7 +29,22 @@ final class EFBYPostmanAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct EFBYPostmanApp: App {
     @NSApplicationDelegateAdaptor(EFBYPostmanAppDelegate.self) private var appDelegate
-    @StateObject private var viewModel = MainViewModel(dependencies: AppDependencies.live())
+    @StateObject private var viewModel: MainViewModel
+
+    init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
+            do {
+                let testViewModel = try UITestLaunchConfiguration.makeViewModel()
+                _viewModel = StateObject(wrappedValue: testViewModel)
+            } catch {
+                fatalError("Invalid UI test configuration: \(error)")
+            }
+            return
+        }
+        #endif
+        _viewModel = StateObject(wrappedValue: MainViewModel(dependencies: AppDependencies.live()))
+    }
 
     var body: some Scene {
         WindowGroup("EFBY Request Lab") {

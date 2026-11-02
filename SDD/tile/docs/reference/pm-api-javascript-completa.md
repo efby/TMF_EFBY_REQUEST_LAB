@@ -12,6 +12,7 @@ Este documento describe lo que el **motor de scripts** del producto expone en **
 - **`pm.request`** se construye a partir del modelo de petición actual y se **enlaza** a mutaciones en el runtime (cabeceras, query, cuerpo).
 - **`pm.response`**, **`responseBody`**, **`responseCode`** reflejan el estado de respuesta **según el momento del evento** (pre-request vs post-response): en pre-request la respuesta puede estar vacía o ausente.
 - Los handlers **WebSocket** (`pm.websocket.*`) reciben mensajes y causas de cierre desde el runtime que la app rellena.
+- JavaScript tiene un presupuesto configurable mediante `ScriptEngine(executionTimeLimit:)` (5 segundos por defecto). Cancelación o agotamiento del presupuesto descarta las mutaciones del reporte y detiene el envío o callback asociado. Incluye utilidades y expresiones de plantilla; véanse las condiciones y la dependencia de WebKit SPI en [la especificación del runtime](../../specs/javascript-pm-runtime.spec.md#interrupción-de-ejecución).
 
 ---
 
@@ -19,12 +20,14 @@ Este documento describe lo que el **motor de scripts** del producto expone en **
 
 | Miembro | Descripción |
 |---------|-------------|
-| `pm.globals` | Objeto con `get(key)`, `set(key, value)`, `unset(key)` → mapa **global** del workspace. |
+| `pm.globals` | Objeto con `get(key)`, `set(key, value)`, `unset(key)`, `clear()` → mapa **global** del workspace en el runtime. |
 | `pm.collectionVariables` | Igual para variables de **colección** (ámbito de la petición según contexto de ejecución). |
 | `pm.environment` | Igual para variables del **entorno activo**, más: `create(name)`, `select(nameOrId)` / `activate(nameOrId)`, `getActive()`, `list()`. |
 | `pm.variables` | Variables **locales** a la petición/pestaña. |
 | `pm.createEnvironment(name)` / `pm.createenvironment(name)` | Crea y **activa** un entorno nuevo. |
 | `pm.setActiveEnvironment(nameOrId)` / `pm.setactiveenvironment(nameOrId)` | Activa un entorno por nombre o id. |
+
+En el entorno activo, `set` conserva los identificadores y las filas ajenas (incluidas las deshabilitadas); escribir una clave deshabilitada la habilita. `unset` elimina las filas de esa clave y `clear` elimina todas. Reactivar el entorno no restaura filas eliminadas. Estas reglas se aplican también dentro de expresiones de plantilla.
 
 ---
 

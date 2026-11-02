@@ -22,6 +22,9 @@ targets:
 
 - Al cerrar pestañas o destruir el estado asociado, no deben quedar handlers ni tareas en segundo plano activas.
   - **Verificación**: pruebas que fuercen deinit o cierre y comprueben ausencia de fugas mediante expectativas sobre cancelación o contadores de tareas.
+- Cancelar durante la apertura o un ping resuelve la espera y cierra la tarea y la sesión, incluso si el callback de red no llega. Un callback tardío no reanuda dos veces una continuación.
+- En flujos, el límite de apertura cancela la conexión pendiente. Una conexión que llega después de cancelar se desconecta antes de descartarla.
+- Regresiones en `WebSocketCancellationTests` (apertura, ping, recepción, envío y registros tardíos, con transporte simulado), `FlowCancellationIntegrationTests.testWebSocketOpenDeadlineCancelsNativeWaitBeforeLatePong` y `ScriptRequestInterruptionTests` (interrupción de preparación, payload y callbacks).
 
 ## Trazabilidad
 

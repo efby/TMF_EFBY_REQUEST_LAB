@@ -25,6 +25,7 @@ final class JavaScriptRuntimeAutocompleteTests: XCTestCase {
                 "get(key)",
                 "set(key, value)",
                 "unset(key)",
+                "clear()",
                 "create(name)",
                 "select(nameOrId)",
                 "activate(nameOrId)",

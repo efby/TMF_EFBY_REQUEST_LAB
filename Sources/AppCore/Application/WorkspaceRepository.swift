@@ -30,6 +30,9 @@ public actor WorkspaceRepository {
     public func save(_ state: WorkspaceState) throws {
         let url = try storageURL()
         let data = try encoder.encode(state)
+        if fileManager.fileExists(atPath: url.path), try Data(contentsOf: url) == data {
+            return
+        }
         try data.write(to: url, options: .atomic)
     }
 

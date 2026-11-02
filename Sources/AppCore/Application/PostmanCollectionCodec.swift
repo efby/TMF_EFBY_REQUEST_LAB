@@ -38,7 +38,7 @@ public struct PostmanCollectionCodec: Sendable {
         targetVersion: PostmanSchemaVersion? = nil
     ) throws -> Data {
         let version = targetVersion ?? collection.info.schemaVersion
-        let root: [String: Any] = [
+        var root: [String: Any] = [
             "info": [
                 "name": collection.info.name,
                 "description": collection.info.description,
@@ -47,7 +47,6 @@ public struct PostmanCollectionCodec: Sendable {
             "auth": authDictionary(collection.auth) as Any,
             "event": collection.scripts.map(eventDictionary),
             "variable": collection.variables.map(variableDictionary),
-            "item": collection.items.map(itemDictionary),
         ].compactMapValues { value in
             switch value {
             case let array as [Any] where array.isEmpty:
@@ -58,6 +57,8 @@ public struct PostmanCollectionCodec: Sendable {
                 return value
             }
         }
+        // Postman requires item even when the collection is empty.
+        root["item"] = collection.items.map(itemDictionary)
 
         do {
             return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
@@ -270,12 +271,13 @@ public struct PostmanCollectionCodec: Sendable {
 
             let script = event["script"] as? [String: Any]
             let lines = (script?["exec"] as? [Any])?.compactMap(stringValue(in:)) ?? []
+            let source = script?["exec"] as? String ?? lines.joined(separator: "\n")
             let language = stringValue(in: script?["type"]) ?? "javascript"
             return ScriptDefinition(
                 name: stringValue(in: event["name"]) ?? listen,
                 listen: eventType,
                 language: language,
-                source: lines.joined(separator: "\n")
+                source: source
             )
         }
     }
@@ -375,7 +377,7 @@ public struct PostmanCollectionCodec: Sendable {
     private func requestDictionary(_ request: APIRequestModel) -> [String: Any] {
         var dictionary: [String: Any] = [
             "method": request.method.rawValue,
-            "header": request.headers.filter(\.isEnabled).map(keyValueDictionary),
+            "header": request.headers.map(keyValueDictionary),
             "url": urlDictionary(for: request),
             "_efbyRequestLab": requestMetadataDictionary(request),
         ]
@@ -557,17 +559,18 @@ public struct PostmanCollectionCodec: Sendable {
         [
             "name": response.name,
             "code": response.statusCode,
-            "header": response.headers.filter(\.isEnabled).map(keyValueDictionary),
+            "header": response.headers.map(keyValueDictionary),
             "body": response.body,
         ]
     }
 
     private func eventDictionary(_ event: ScriptDefinition) -> [String: Any] {
         [
+            "name": event.name,
             "listen": event.listen.rawValue,
             "script": [
                 "type": normalizedScriptLanguage(event.language),
-                "exec": event.source.split(whereSeparator: \.isNewline).map(String.init),
+                "exec": event.source.components(separatedBy: "\n"),
             ],
         ]
     }
@@ -662,8 +665,8 @@ public struct PostmanCollectionCodec: Sendable {
     private func urlDictionary(for request: APIRequestModel) -> [String: Any] {
         [
             "raw": request.url,
-            "query": request.queryItems.filter(\.isEnabled).map(keyValueDictionary),
-            "variable": request.pathVariables.filter(\.isEnabled).map(keyValueDictionary),
+            "query": request.queryItems.map(keyValueDictionary),
+            "variable": request.pathVariables.map(keyValueDictionary),
         ]
     }
 
@@ -685,12 +688,12 @@ public struct PostmanCollectionCodec: Sendable {
         case .urlEncoded:
             return [
                 "mode": "urlencoded",
-                "urlencoded": body.parameters.filter(\.isEnabled).map(keyValueDictionary),
+                "urlencoded": body.parameters.map(keyValueDictionary),
             ]
         case .formData:
             return [
                 "mode": "formdata",
-                "formdata": body.parameters.filter(\.isEnabled).map(keyValueDictionary),
+                "formdata": body.parameters.map(keyValueDictionary),
             ]
         }
     }

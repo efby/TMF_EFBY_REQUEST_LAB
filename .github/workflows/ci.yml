@@ -7,9 +7,17 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test-and-package:
     runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,6 +25,7 @@ jobs:
       - name: Select Xcode (Swift 6.3)
         run: |
           for app in \
+            /Applications/Xcode_26.6.app \
             /Applications/Xcode_26.5.app \
             /Applications/Xcode_26.4.1.app \
             /Applications/Xcode_26.4.app \
@@ -31,11 +40,92 @@ jobs:
           swift --version
           swift --version | grep -q 'Swift version 6\.[3-9]'
 
+      - name: Prepare test reports
+        run: |
+          mkdir -p .build/ci-results/core .build/ci-results/ui
+          {
+            sw_vers
+            xcodebuild -version
+            swift --version
+          } > .build/ci-results/toolchain.log
+
+      - name: Test report exporter
+        run: python3 -B -m unittest discover -s Tests/ToolTests -v
+
       - name: Resolve packages
+        id: packages
         run: swift package resolve
 
       - name: Run tests
-        run: swift test
+        id: core
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          set +e
+          swift test 2>&1 | tee .build/ci-results/core/tests.log
+          test_status=$?
+          echo "exit_code=$test_status" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$test_status" > .build/ci-results/core/exit-code.txt
+          exit "$test_status"
+
+      - name: Run macOS UI tests
+        id: ui
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          set +e
+          ./Tools/test_ui.sh \
+            --result-bundle "$GITHUB_WORKSPACE/.build/ci-results/ui/Results.xcresult" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 180 \
+            2>&1 | tee .build/ci-results/ui/tests.log
+          test_status=$?
+          echo "exit_code=$test_status" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$test_status" > .build/ci-results/ui/exit-code.txt
+          exit "$test_status"
+
+      - name: Export UI reports and failure screenshots
+        if: ${{ always() && steps.ui.outcome != '' && steps.ui.outcome != 'skipped' }}
+        timeout-minutes: 5
+        env:
+          UI_TEST_EXIT_CODE: ${{ steps.ui.outputs.exit_code }}
+        run: |
+          python3 Tools/export_ui_test_results.py \
+            --result-bundle .build/ci-results/ui/Results.xcresult \
+            --output-directory .build/ci-results/ui/report \
+            --test-exit-code "${UI_TEST_EXIT_CODE:-1}"
+
+      - name: Add test summary
+        if: ${{ always() }}
+        env:
+          CORE_OUTCOME: ${{ steps.core.outcome }}
+          UI_OUTCOME: ${{ steps.ui.outcome }}
+        run: |
+          {
+            echo '## Test results'
+            echo
+            printf '| Suite | Result |\n| --- | --- |\n'
+            printf '| Core | %s |\n' "${CORE_OUTCOME:-not run}"
+            printf '| macOS UI | %s |\n' "${UI_OUTCOME:-not run}"
+            echo
+            if [[ -f .build/ci-results/ui/report/summary.md ]]; then
+              cat .build/ci-results/ui/report/summary.md
+            fi
+            echo
+            echo 'Core logs, UI JUnit reports and the Xcode result bundle are available in the test artifacts.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test reports and screenshots
+        if: ${{ always() }}
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: EFBYRequestLab-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .build/ci-results/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Build DMG
         run: ./Tools/build_dmg.sh

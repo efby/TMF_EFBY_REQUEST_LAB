@@ -1,0 +1,193 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		EFB100000000000000000001 /* RequestLabUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB100000000000000000003 /* RequestLabUITests.swift */; };
+		EFB100000000000000000002 /* TestHTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB100000000000000000004 /* TestHTTPServer.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		EFB100000000000000000003 /* RequestLabUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestLabUITests.swift; sourceTree = "<group>"; };
+		EFB100000000000000000004 /* TestHTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHTTPServer.swift; sourceTree = "<group>"; };
+		EFB100000000000000000005 /* EfbyRequestLabUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EfbyRequestLabUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		EFB100000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		EFB100000000000000000007 = {
+			isa = PBXGroup;
+			children = (
+				EFB100000000000000000003 /* RequestLabUITests.swift */,
+				EFB100000000000000000008 /* Fixtures */,
+				EFB100000000000000000009 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EFB100000000000000000008 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (EFB100000000000000000004 /* TestHTTPServer.swift */);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		EFB100000000000000000009 /* Products */ = {
+			isa = PBXGroup;
+			children = (EFB100000000000000000005 /* EfbyRequestLabUITests.xctest */);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EFB10000000000000000000A /* EfbyRequestLabUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EFB100000000000000000010;
+			buildPhases = (
+				EFB10000000000000000000B /* Sources */,
+				EFB100000000000000000006 /* Frameworks */,
+				EFB10000000000000000000C /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = EfbyRequestLabUITests;
+			productName = EfbyRequestLabUITests;
+			productReference = EFB100000000000000000005 /* EfbyRequestLabUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EFB10000000000000000000D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					EFB10000000000000000000A = {CreatedOnToolsVersion = 26.0; };
+				};
+			};
+			buildConfigurationList = EFB10000000000000000000F;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = EFB100000000000000000007;
+			productRefGroup = EFB100000000000000000009;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (EFB10000000000000000000A /* EfbyRequestLabUITests */);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		EFB10000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		EFB10000000000000000000B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EFB100000000000000000001 /* RequestLabUITests.swift in Sources */,
+				EFB100000000000000000002 /* TestHTTPServer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		EFB100000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				ENABLE_TESTABILITY = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		EFB100000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		EFB100000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = EfbyRequestLabUITests.xcodeproj/UITestRunner.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = com.efby.requestlabs.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Debug;
+		};
+		EFB100000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = EfbyRequestLabUITests.xcodeproj/UITestRunner.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = com.efby.requestlabs.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		EFB10000000000000000000F = {
+			isa = XCConfigurationList;
+			buildConfigurations = (EFB100000000000000000011 /* Debug */, EFB100000000000000000012 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EFB100000000000000000010 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (EFB100000000000000000013 /* Debug */, EFB100000000000000000014 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = EFB10000000000000000000D /* Project object */;
+}

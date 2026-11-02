@@ -25,6 +25,14 @@ targets:
 
 ## Trazabilidad
 
+### Conservación al editar y exportar
+
+- Headers, query, variables de path y formularios se exportan también cuando están deshabilitados, conservando `disabled`.
+- Los scripts conservan nombre y fuente exacta, incluidas líneas vacías, CRLF y salto final. Se admite `exec` como array de líneas o cadena.
+- Una colección vacía conserva el campo obligatorio `item: []`.
+- Editar una petición existente conserva ejemplos, descripción e identidad, también en carpetas anidadas.
+- Regresiones: `PostmanCollectionCodecTests.testRoundTripPreservesDisabledRequestParametersAndSavedResponseHeaders`, `testScriptRoundTripPreservesExactSourceAtEveryCollectionLevel`, `testEmptyCollectionRoundTripPreservesRequiredItemArray` y `MainViewModelRequestIntegrityTests`.
+
 | ID | Caso de prueba | Estado |
 |----|----------------|--------|
 | REQ-POST-001 | `importsV21CollectionPreservesTree` | Automatizado |

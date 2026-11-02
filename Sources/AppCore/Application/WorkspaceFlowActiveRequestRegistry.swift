@@ -5,15 +5,24 @@ import Foundation
 /// `URLSessionDataTask.cancel()` and `WebSocketConnection.disconnect()` on everything still in flight.
 public final class WorkspaceFlowActiveRequestRegistry: @unchecked Sendable {
     private let lock = NSLock()
+    private var cancelled = false
     private var httpDataTasks: [URLSessionDataTask] = []
     private var webSocketConnections: [any WebSocketConnectionProtocol] = []
 
     public init() {}
 
+    public var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
     public func registerHTTPDataTask(_ task: URLSessionDataTask) {
         lock.lock()
-        httpDataTasks.append(task)
+        let shouldCancel = cancelled
+        if !shouldCancel { httpDataTasks.append(task) }
         lock.unlock()
+        if shouldCancel { task.cancel() }
     }
 
     public func unregisterHTTPDataTask(_ task: URLSessionDataTask) {
@@ -24,8 +33,10 @@ public final class WorkspaceFlowActiveRequestRegistry: @unchecked Sendable {
 
     public func registerWebSocket(_ connection: any WebSocketConnectionProtocol) {
         lock.lock()
-        webSocketConnections.append(connection)
+        let shouldDisconnect = cancelled
+        if !shouldDisconnect { webSocketConnections.append(connection) }
         lock.unlock()
+        if shouldDisconnect { Task { await connection.disconnect() } }
     }
 
     public func unregisterWebSocket(_ connection: any WebSocketConnectionProtocol) {
@@ -38,6 +49,7 @@ public final class WorkspaceFlowActiveRequestRegistry: @unchecked Sendable {
     /// Cancels all registered HTTP data tasks. Safe from `withTaskCancellationHandler.onCancel` (synchronous).
     public func cancelAllHTTPDataTasks() {
         lock.lock()
+        cancelled = true
         let tasks = httpDataTasks
         httpDataTasks.removeAll()
         lock.unlock()

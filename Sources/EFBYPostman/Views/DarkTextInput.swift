@@ -4,6 +4,7 @@ import SwiftUI
 struct DarkTextInput: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    var controlIdentifier: String? = nil
     var isSecure: Bool = false
     var isEnabled: Bool = true
     /// AppKit point size; default matches previous hard-coded body text.
@@ -33,6 +34,7 @@ struct DarkTextInput: NSViewRepresentable {
         control.delegate = coordinator
         control.stringValue = text
         control.isEnabled = isEnabled
+        control.setAccessibilityIdentifier(controlIdentifier)
         control.isBordered = false
         control.focusRingType = .none
         control.font = .systemFont(ofSize: fontSize)

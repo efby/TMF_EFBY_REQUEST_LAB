@@ -2,6 +2,90 @@ import EfbyPresentation
 import XCTest
 
 final class PostmanCollectionCodecTests: XCTestCase {
+    func testEmptyCollectionRoundTripPreservesRequiredItemArray() throws {
+        let codec = PostmanCollectionCodec()
+        let collection = CollectionModel(info: CollectionInfoModel(name: "Empty"))
+        let data = try codec.export(collection)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual((root["item"] as? [Any])?.count, 0)
+        let imported = try codec.importCollection(data: data)
+        XCTAssertEqual(imported.info.name, "Empty")
+        XCTAssertTrue(imported.items.isEmpty)
+    }
+
+    func testScriptRoundTripPreservesExactSourceAtEveryCollectionLevel() throws {
+        let codec = PostmanCollectionCodec()
+        let sources = ["", "\n", "\r\n", "\r\nconst template = `first\r\n\r\nlast`;\r\n\r\n", "first\rsecond\n\n"]
+        for source in sources {
+            let script = ScriptDefinition(name: "Preserved script", listen: .preRequest, language: "text/javascript", source: source)
+            let collection = CollectionModel(
+                info: CollectionInfoModel(name: "Scripts"),
+                scripts: [script],
+                items: [CollectionNode(name: "Folder", kind: .folder, scripts: [script], children: [
+                    CollectionNode(name: "Request", kind: .request, request: APIRequestModel(
+                        name: "Request", url: "https://example.test", scripts: [script]
+                    ), scripts: [script]),
+                ])]
+            )
+            for version in [PostmanSchemaVersion.v2, .v21] {
+                let imported = try codec.importCollection(data: codec.export(collection, targetVersion: version))
+                let folder = try XCTUnwrap(imported.items.first)
+                let requestNode = try XCTUnwrap(folder.children.first)
+                for scripts in [imported.scripts, folder.scripts, requestNode.scripts, requestNode.request?.scripts ?? []] {
+                    XCTAssertEqual(scripts.count, 1)
+                    let preserved = try XCTUnwrap(scripts.first)
+                    XCTAssertEqual(preserved.name, script.name)
+                    XCTAssertEqual(Array(preserved.source.utf8), Array(source.utf8))
+                }
+            }
+        }
+    }
+
+    func testImportsScriptExecStringWithoutChangingSource() throws {
+        let source = "\nconst template = `first\r\n\r\nlast`;\n\n"
+        let data = try JSONSerialization.data(withJSONObject: [
+            "info": ["name": "String exec", "schema": PostmanSchemaVersion.v21.schemaURL],
+            "item": [],
+            "event": [["listen": "prerequest", "script": ["type": "text/javascript", "exec": source]]],
+        ])
+        let imported = try PostmanCollectionCodec().importCollection(data: data)
+        let script = try XCTUnwrap(imported.scripts.first)
+
+        XCTAssertEqual(Array(script.source.utf8), Array(source.utf8))
+    }
+
+    func testRoundTripPreservesDisabledRequestParametersAndSavedResponseHeaders() throws {
+        let codec = PostmanCollectionCodec()
+        let entries = [
+            KeyValueEntry(key: "enabled", value: "used"),
+            KeyValueEntry(key: "disabled", value: "saved", isEnabled: false),
+        ]
+        for bodyKind in [RequestBodyKind.urlEncoded, .formData] {
+            let request = APIRequestModel(
+                name: "Parameters", url: "https://example.test/:enabled",
+                queryItems: entries, pathVariables: entries, headers: entries,
+                body: RequestBodyModel(kind: bodyKind, parameters: entries)
+            )
+            let collection = CollectionModel(info: CollectionInfoModel(name: "Parameters"), items: [
+                CollectionNode(name: "Parameters", kind: .request, request: request, responses: [
+                    SavedResponseModel(name: "Example", statusCode: 200, headers: entries, body: "OK"),
+                ]),
+            ])
+            for version in [PostmanSchemaVersion.v2, .v21] {
+                let imported = try codec.importCollection(data: codec.export(collection, targetVersion: version))
+                let node = try XCTUnwrap(imported.items.first)
+                let preserved = try XCTUnwrap(node.request)
+                XCTAssertEqual(preserved.body.kind, bodyKind)
+                for values in [preserved.headers, preserved.queryItems, preserved.pathVariables, preserved.body.parameters, node.responses.first?.headers ?? []] {
+                    XCTAssertEqual(values.map(\.key), entries.map(\.key))
+                    XCTAssertEqual(values.map(\.value), entries.map(\.value))
+                    XCTAssertEqual(values.map(\.isEnabled), entries.map(\.isEnabled))
+                }
+            }
+        }
+    }
+
     func testImportsPostmanV21CollectionAndPreservesHierarchy() throws {
         let codec = PostmanCollectionCodec()
         let data = Data(sampleV21.utf8)

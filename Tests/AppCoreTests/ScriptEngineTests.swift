@@ -2,6 +2,113 @@ import EfbyPresentation
 import XCTest
 
 final class ScriptEngineTests: XCTestCase {
+    func testEnvironmentSetPreservesDisabledVariablesAndExistingIdentifiers() throws {
+        let active = VariableValue(key: "counter", value: "1")
+        let disabled = VariableValue(key: "saved", value: "keep", isEnabled: false)
+        let profile = EnvironmentProfile(name: "QA", variables: [active, disabled])
+        let other = EnvironmentProfile(name: "Other", variables: [VariableValue(key: "other", value: "untouched")])
+        let report = runEnvironmentScript(
+            #"pm.environment.set("counter", "2"); pm.environment.set("new", "3");"#,
+            profile: profile,
+            otherProfiles: [other]
+        )
+
+        let updated = try XCTUnwrap(report.runtime.environments.first)
+        XCTAssertEqual(updated.variables.map(\.key), ["counter", "saved", "new"])
+        XCTAssertEqual(updated.variables[0].id, active.id)
+        XCTAssertEqual(updated.variables[0].value, "2")
+        XCTAssertEqual(updated.variables[1], disabled)
+        XCTAssertEqual(report.runtime.environments[1], other)
+        XCTAssertNil(report.runtime.environment["saved"])
+        XCTAssertEqual(report.runtime.environment["new"], "3")
+    }
+
+    func testEnvironmentSetEnablesExistingDisabledVariableAndPreservesIdentifier() throws {
+        let disabled = VariableValue(key: "counter", value: "1", isEnabled: false)
+        let profile = EnvironmentProfile(name: "QA", variables: [disabled])
+        let report = runEnvironmentScript(#"pm.environment.set("counter", "2");"#, profile: profile)
+
+        let variables = try XCTUnwrap(report.runtime.environments.first?.variables)
+        XCTAssertEqual(variables.count, 1)
+        XCTAssertEqual(variables.first?.id, disabled.id)
+        XCTAssertEqual(variables.first?.value, "2")
+        XCTAssertEqual(variables.first?.isEnabled, true)
+        XCTAssertEqual(report.runtime.environment["counter"], "2")
+    }
+
+    func testEnvironmentUnsetDeletesOnlyRequestedKeyAndDoesNotRestoreItOnActivation() throws {
+        let disabled = VariableValue(key: "saved", value: "keep", isEnabled: false)
+        let profile = EnvironmentProfile(name: "QA", variables: [
+            VariableValue(key: "remove", value: "old"), disabled,
+        ])
+        let report = runEnvironmentScript(
+            #"pm.environment.unset("remove"); pm.environment.set("new", "1"); pm.environment.select("QA");"#,
+            profile: profile
+        )
+
+        let variables = try XCTUnwrap(report.runtime.environments.first?.variables)
+        XCTAssertEqual(variables.map(\.key), ["saved", "new"])
+        XCTAssertEqual(variables.first, disabled)
+        XCTAssertNil(report.runtime.environment["remove"])
+    }
+
+    func testEnvironmentClearRemovesAllVariablesAndDoesNotRestoreThemOnActivation() throws {
+        let profile = EnvironmentProfile(name: "QA", variables: [
+            VariableValue(key: "counter", value: "1"),
+            VariableValue(key: "saved", value: "keep", isEnabled: false),
+        ])
+        let report = runEnvironmentScript(#"pm.environment.clear(); pm.environment.select("QA");"#, profile: profile)
+
+        XCTAssertEqual(report.runtime.environments.first?.variables, [])
+        XCTAssertTrue(report.runtime.environment.isEmpty)
+        XCTAssertFalse(report.logs.contains { $0.contains("JavaScript error") })
+    }
+
+    func testTemplateExpressionUsesSameEnvironmentMutationRules() throws {
+        let active = VariableValue(key: "counter", value: "1")
+        let disabled = VariableValue(key: "saved", value: "keep", isEnabled: false)
+        let profile = EnvironmentProfile(name: "QA", variables: [active, disabled])
+        let engine = ScriptEngine()
+        let updated = try XCTUnwrap(engine.evaluateTemplateExpressionReport(
+            #"(pm.environment.set("counter", "2"), pm.environment.unset("missing"), "done")"#,
+            runtime: environmentRuntime(profile)
+        ))
+
+        XCTAssertEqual(updated.value, "done")
+        XCTAssertEqual(updated.runtime.environments.first?.variables.first?.id, active.id)
+        XCTAssertEqual(updated.runtime.environments.first?.variables.last, disabled)
+        let cleared = try XCTUnwrap(engine.evaluateTemplateExpressionReport(
+            #"(pm.environment.clear(), "done")"#,
+            runtime: updated.runtime
+        ))
+        XCTAssertEqual(cleared.value, "done")
+        XCTAssertTrue(cleared.runtime.environment.isEmpty)
+        XCTAssertEqual(cleared.runtime.environments.first?.variables, [])
+    }
+
+    private func runEnvironmentScript(
+        _ source: String,
+        profile: EnvironmentProfile,
+        otherProfiles: [EnvironmentProfile] = []
+    ) -> ScriptExecutionReport {
+        ScriptEngine().execute(
+            scripts: [ScriptDefinition(name: "Environment regression", listen: .preRequest, language: "text/javascript", source: source)],
+            event: .preRequest,
+            runtime: environmentRuntime(profile, otherProfiles: otherProfiles)
+        )
+    }
+
+    private func environmentRuntime(
+        _ profile: EnvironmentProfile,
+        otherProfiles: [EnvironmentProfile] = []
+    ) -> ScriptRuntimeContext {
+        ScriptRuntimeContext(
+            environment: profile.variables.filter(\.isEnabled).reduce(into: [:]) { $0[$1.key] = $1.value },
+            environments: [profile] + otherProfiles,
+            activeEnvironmentID: profile.id
+        )
+    }
+
     func testRsaEncryptProducesHexCiphertext() {
         let engine = ScriptEngine()
         let script = ScriptDefinition(

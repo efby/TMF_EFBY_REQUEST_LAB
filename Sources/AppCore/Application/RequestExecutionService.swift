@@ -3,7 +3,7 @@ import Foundation
 import Security
 
 public final class RequestExecutionService: Sendable {
-    private let session: URLSession
+    private let transportPool: HTTPTransportPool
     private let resolver: VariableResolver
     private let scriptEngine: ScriptEngine
     private let lambdaInvokeService = "lambda"
@@ -12,29 +12,106 @@ public final class RequestExecutionService: Sendable {
     private final class ExpressionEvaluationState {
         var runtime: ScriptRuntimeContext
         var logs: [String] = []
+        var interruption: ScriptExecutionInterruption?
 
         init(runtime: ScriptRuntimeContext) {
             self.runtime = runtime
         }
     }
 
-    public init(
+    typealias SessionFactory = @Sendable (URLSessionConfiguration, any URLSessionDelegate) -> URLSession
+
+    public convenience init(
         session: URLSession = .shared,
         resolver: VariableResolver = VariableResolver(),
         scriptEngine: ScriptEngine = ScriptEngine()
     ) {
-        self.session = session
+        self.init(session: session, resolver: resolver, scriptEngine: scriptEngine) { configuration, delegate in
+            URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        }
+    }
+
+    init(
+        session: URLSession = .shared,
+        resolver: VariableResolver = VariableResolver(),
+        scriptEngine: ScriptEngine = ScriptEngine(),
+        sessionFactory: @escaping SessionFactory
+    ) {
+        self.transportPool = HTTPTransportPool(configuration: session.configuration, factory: sessionFactory)
         self.resolver = resolver
         self.scriptEngine = scriptEngine
     }
 
+    /// Permanently closes the sessions owned by this service; it does not invalidate the injected base session.
+    public func invalidate() {
+        transportPool.invalidate()
+    }
+
+    private final class HTTPTransportPool: @unchecked Sendable {
+        private struct Key: Hashable {
+            let validation: TLSValidationMode
+            let minimumVersion: TLSMinimumVersionOption
+        }
+
+        private let lock = NSLock()
+        private let baseConfiguration: URLSessionConfiguration
+        private let factory: SessionFactory
+        // The domain permits only two validation modes and four minimum versions: at most eight sessions.
+        private var sessions: [Key: URLSession] = [:]
+        private var closed = false
+
+        init(configuration: URLSessionConfiguration, factory: @escaping SessionFactory) {
+            self.baseConfiguration = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
+            self.factory = factory
+        }
+
+        deinit { invalidate() }
+
+        func checkOpen() throws {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !closed else { throw AppError.network("The HTTP execution service is closed.") }
+        }
+
+        func session(for request: APIRequestModel) throws -> URLSession {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !closed else { throw AppError.network("The HTTP execution service is closed.") }
+            let key = Key(validation: request.tlsValidationMode, minimumVersion: request.minimumTLSVersion)
+            if let session = sessions[key] { return session }
+            let configuration = (baseConfiguration.copy() as? URLSessionConfiguration) ?? .ephemeral
+            switch request.minimumTLSVersion {
+            case .systemDefault: break
+            case .tls10: configuration.tlsMinimumSupportedProtocolVersion = .TLSv10
+            case .tls11: configuration.tlsMinimumSupportedProtocolVersion = .TLSv11
+            case .tls12: configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
+            }
+            let delegate = RequestSessionDelegate(allowInsecureTLS: request.tlsValidationMode == .insecure)
+            let session = factory(configuration, delegate)
+            sessions[key] = session
+            return session
+        }
+
+        func invalidate() {
+            lock.lock()
+            guard !closed else { lock.unlock(); return }
+            closed = true
+            let ownedSessions = Array(sessions.values)
+            sessions.removeAll()
+            lock.unlock()
+            for session in ownedSessions { session.invalidateAndCancel() }
+        }
+    }
+
     private final class RequestSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate, @unchecked Sendable {
         private let allowInsecureTLS: Bool
+        private let recordsDiagnostics: Bool
         private let lock = NSLock()
         private var lastTLSDiagnosticMessage: String?
 
-        init(allowInsecureTLS: Bool) {
+        init(allowInsecureTLS: Bool, recordsDiagnostics: Bool = false) {
             self.allowInsecureTLS = allowInsecureTLS
+            self.recordsDiagnostics = recordsDiagnostics
         }
 
         var lastTLSDiagnostic: String? {
@@ -79,6 +156,8 @@ public final class RequestExecutionService: Sendable {
         }
 
         private func recordTLSDiagnostic(for protectionSpace: URLProtectionSpace) {
+            // Session-level challenges can cover multiple requests. Only task-specific delegates retain diagnostics.
+            guard recordsDiagnostics else { return }
             var parts: [String] = []
             parts.append("TLS protection space host: \(protectionSpace.host)")
             parts.append("Port: \(protectionSpace.port)")
@@ -118,6 +197,8 @@ public final class RequestExecutionService: Sendable {
         activeEnvironmentID: UUID? = nil,
         utilityLibraries: [WorkspaceScriptUtility] = []
     ) async throws -> ExecutionOutcome {
+        try Task.checkCancellation()
+        try transportPool.checkOpen()
         var executionLogs: [String] = []
         executionLogs.append("URL plantilla: \(request.url)")
         var runtime = ScriptRuntimeContext(
@@ -151,20 +232,22 @@ public final class RequestExecutionService: Sendable {
             }
         }
         var rawRequest = rawHTTPRepresentation(for: urlRequest)
-        let transport = configuredTransport(for: request)
+        try Task.checkCancellation()
+        let transport = try configuredTransport(for: request)
         executionLogs.append(contentsOf: transport.logs)
 
         let allowedRetries = max(0, request.retryOn206Count)
         var currentAttempt = 0
         var response: HTTPResponseModel!
         while true {
+            try Task.checkCancellation()
             currentAttempt += 1
             response = try await performSingleHTTPDataExchange(
                 urlRequest,
                 originalRequest: request,
-                session: transport.session,
-                delegate: transport.delegate
+                session: transport.session
             )
+            try Task.checkCancellation()
             if response.statusCode == 206 && currentAttempt <= allowedRetries {
                 executionLogs.append(
                     """
@@ -177,6 +260,7 @@ public final class RequestExecutionService: Sendable {
                     executionLogs.append("Waiting \(delayMs) ms before retrying after HTTP 206.")
                     try await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
                 }
+                try Task.checkCancellation()
                 urlRequest = try applyPreRequestScriptsAndBuildURLRequest(
                     request: request,
                     utilityLibraries: utilityLibraries,
@@ -210,6 +294,8 @@ public final class RequestExecutionService: Sendable {
             utilities: utilityLibraries
         )
 
+        try testReport.checkInterruption()
+        try Task.checkCancellation()
         return ExecutionOutcome(
             response: response,
             rawRequest: rawRequest,
@@ -275,6 +361,7 @@ public final class RequestExecutionService: Sendable {
         runtime: inout ScriptRuntimeContext,
         executionLogs: inout [String]
     ) throws -> URLRequest {
+        try Task.checkCancellation()
         let preRequestReport = scriptEngine.execute(
             scripts: request.scripts,
             event: .preRequest,
@@ -282,6 +369,8 @@ public final class RequestExecutionService: Sendable {
             request: request,
             utilities: utilityLibraries
         )
+        try preRequestReport.checkInterruption()
+        try Task.checkCancellation()
         runtime = preRequestReport.runtime
         executionLogs.append(contentsOf: preRequestReport.logs)
 
@@ -299,14 +388,23 @@ public final class RequestExecutionService: Sendable {
             utilityLibraries: utilityLibraries
         )
 
-        let urlRequest = try makeURLRequest(
-            request: request,
-            requestHeaders: runtime.requestHeaders,
-            requestQueryItems: runtime.requestQueryItems,
-            requestBody: runtime.requestBody,
-            context: variableContext,
-            expressionEvaluator: expressionEvaluator
-        )
+        let urlRequest: URLRequest
+        do {
+            urlRequest = try makeURLRequest(
+                request: request,
+                requestHeaders: runtime.requestHeaders,
+                requestQueryItems: runtime.requestQueryItems,
+                requestBody: runtime.requestBody,
+                context: variableContext,
+                expressionEvaluator: expressionEvaluator
+            )
+        } catch {
+            try expressionState.interruption?.checkInterruption()
+            try Task.checkCancellation()
+            throw error
+        }
+        try expressionState.interruption?.checkInterruption()
+        try Task.checkCancellation()
         runtime = expressionState.runtime
         executionLogs.append(contentsOf: expressionState.logs)
         return urlRequest
@@ -315,14 +413,17 @@ public final class RequestExecutionService: Sendable {
     private func performSingleHTTPDataExchange(
         _ urlRequest: URLRequest,
         originalRequest: APIRequestModel,
-        session: URLSession,
-        delegate: RequestSessionDelegate
+        session: URLSession
     ) async throws -> HTTPResponseModel {
+        let delegate = RequestSessionDelegate(
+            allowInsecureTLS: originalRequest.tlsValidationMode == .insecure,
+            recordsDiagnostics: true
+        )
         let startedAt = Date()
         let data: Data
         let urlResponse: URLResponse
         do {
-            (data, urlResponse) = try await sessionDataRespectingFlowCancellation(for: urlRequest, session: session)
+            (data, urlResponse) = try await sessionDataRespectingFlowCancellation(for: urlRequest, session: session, delegate: delegate)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -359,59 +460,106 @@ public final class RequestExecutionService: Sendable {
         )
     }
 
-    private func sessionDataRespectingFlowCancellation(
-        for urlRequest: URLRequest,
-        session: URLSession
-    ) async throws -> (Data, URLResponse) {
-        let registry = WorkspaceFlowExecutionCancellationScope.activeRequestRegistry
-        final class DataTaskSlot: @unchecked Sendable {
-            var task: URLSessionDataTask?
+    private final class DataTaskSlot: @unchecked Sendable {
+        private let lock = NSLock()
+        private let registry: WorkspaceFlowActiveRequestRegistry?
+        private var task: URLSessionDataTask?
+        private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
+        private var cancelled = false
+        private var completed = false
+        private var earlyResult: Result<(Data, URLResponse), Error>?
+
+        init(registry: WorkspaceFlowActiveRequestRegistry?) {
+            self.registry = registry
         }
-        let slot = DataTaskSlot()
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
-                let dataTask = session.dataTask(with: urlRequest) { data, response, error in
-                    if let task = slot.task {
-                        registry?.unregisterHTTPDataTask(task)
-                    }
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else if let data, let response {
-                        continuation.resume(returning: (data, response))
-                    } else {
-                        continuation.resume(throwing: URLError(.badServerResponse))
-                    }
-                }
-                slot.task = dataTask
-                registry?.registerHTTPDataTask(dataTask)
-                dataTask.resume()
+
+        func installAndResume(_ task: URLSessionDataTask, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
+            lock.lock()
+            if cancelled || registry?.isCancelled == true {
+                lock.unlock()
+                registry?.unregisterHTTPDataTask(task)
+                task.cancel()
+                continuation.resume(throwing: CancellationError())
+                return
             }
-        } onCancel: {
-            slot.task?.cancel()
+            if let earlyResult {
+                lock.unlock()
+                registry?.unregisterHTTPDataTask(task)
+                continuation.resume(with: earlyResult)
+                return
+            }
+            self.task = task
+            self.continuation = continuation
+            lock.unlock()
+            // Foundation may invoke completion while resume is in progress; never hold the slot lock here.
+            // If cancellation wins after installation, cancelling a suspended task is terminal: resume cannot restart it.
+            task.resume()
+        }
+
+        func complete(_ result: Result<(Data, URLResponse), Error>) {
+            lock.lock()
+            guard !completed else { lock.unlock(); return }
+            completed = true
+            earlyResult = result
+            let continuation = continuation
+            self.continuation = nil
+            let task = task
+            self.task = nil
+            lock.unlock()
+            if let task { registry?.unregisterHTTPDataTask(task) }
+            continuation?.resume(with: result)
+        }
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            completed = true
+            let continuation = continuation
+            self.continuation = nil
+            let task = task
+            self.task = nil
+            lock.unlock()
+            if let task {
+                registry?.unregisterHTTPDataTask(task)
+                task.cancel()
+            }
+            continuation?.resume(throwing: CancellationError())
         }
     }
 
-    private func configuredTransport(for request: APIRequestModel) -> (session: URLSession, delegate: RequestSessionDelegate, logs: [String]) {
-        let delegate = RequestSessionDelegate(allowInsecureTLS: request.tlsValidationMode == .insecure)
-        let configuration = (session.configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
-
-        switch request.minimumTLSVersion {
-        case .systemDefault:
-            break
-        case .tls10:
-            configuration.tlsMinimumSupportedProtocolVersion = .TLSv10
-        case .tls11:
-            configuration.tlsMinimumSupportedProtocolVersion = .TLSv11
-        case .tls12:
-            configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
+    private func sessionDataRespectingFlowCancellation(
+        for urlRequest: URLRequest,
+        session: URLSession,
+        delegate: RequestSessionDelegate
+    ) async throws -> (Data, URLResponse) {
+        try Task.checkCancellation()
+        let registry = WorkspaceFlowExecutionCancellationScope.activeRequestRegistry
+        let slot = DataTaskSlot(registry: registry)
+        let result = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
+                let dataTask = session.dataTask(with: urlRequest) { data, response, error in
+                    if let error {
+                        slot.complete(.failure(error))
+                    } else if let data, let response {
+                        slot.complete(.success((data, response)))
+                    } else {
+                        slot.complete(.failure(URLError(.badServerResponse)))
+                    }
+                }
+                dataTask.delegate = delegate
+                registry?.registerHTTPDataTask(dataTask)
+                slot.installAndResume(dataTask, continuation: continuation)
+            }
+        } onCancel: {
+            slot.cancel()
         }
+        try Task.checkCancellation()
+        if registry?.isCancelled == true { throw CancellationError() }
+        return result
+    }
 
-        let configuredSession = URLSession(
-            configuration: configuration,
-            delegate: delegate,
-            delegateQueue: nil
-        )
-
+    private func configuredTransport(for request: APIRequestModel) throws -> (session: URLSession, logs: [String]) {
+        let session = try transportPool.session(for: request)
         var logs: [String] = []
         if request.tlsValidationMode == .insecure {
             logs.append("Warning: TLS certificate validation is disabled for this request.")
@@ -419,8 +567,7 @@ public final class RequestExecutionService: Sendable {
         if request.minimumTLSVersion != .systemDefault {
             logs.append("TLS minimum version forced to \(request.minimumTLSVersion.displayName).")
         }
-
-        return (configuredSession, delegate, logs)
+        return (session, logs)
     }
 
     private func describeNetworkError(_ error: Error, for request: URLRequest, delegate: RequestSessionDelegate) -> String {
@@ -667,6 +814,7 @@ public final class RequestExecutionService: Sendable {
         utilityLibraries: [WorkspaceScriptUtility]
     ) -> (String, VariableResolutionContext) -> String? {
         { expression, _ in
+            guard state.interruption == nil else { return nil }
             guard let report = self.scriptEngine.evaluateTemplateExpressionReport(
                 expression,
                 runtime: state.runtime,
@@ -676,6 +824,10 @@ public final class RequestExecutionService: Sendable {
                 return nil
             }
 
+            if let interruption = report.interruption {
+                state.interruption = interruption
+                return nil
+            }
             state.runtime = report.runtime
             state.logs.append(contentsOf: report.logs)
             return report.value

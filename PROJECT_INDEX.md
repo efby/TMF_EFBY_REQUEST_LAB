@@ -21,8 +21,8 @@ Composition root: `Sources/EfbyPresentation/Composition/AppDependencies.swift`
 | Area | Abrir primero | Para que sirve |
 | --- | --- | --- |
 | App shell | `Sources/EFBYPostman/EFBYPostmanApp.swift` | Punto de entrada de la app y comandos globales de macOS. |
-| Pantalla principal | `Sources/EFBYPostman/Views/RootView.swift` | Layout principal, sidebar, tabs, editor, response pane, overlays. |
-| Estado central | `Sources/EfbyPresentation/MainViewModel.swift` | Orquesta UI; delega en 12 coordinadores + `CollectionScriptSupport`. |
+| Pantalla principal | `Sources/EFBYPostman/Views/RootView.swift` | Composición de pantalla y estado de presentación; paneles en subcarpetas de `Views/`. |
+| Estado central | `Sources/EfbyPresentation/MainViewModel.swift` | Estado observable e inicialización; operaciones por área en `MainViewModel/`, delegadas a coordinadores. |
 | Modelos base | `Sources/AppCore/Domain/HTTPModels.swift` y `Sources/AppCore/Domain/WorkspaceModels.swift` | Requests, responses, scripts, variables, collections, entornos, drafts. |
 | HTTP runtime | `Sources/AppCore/Application/RequestExecutionService.swift` | Ejecuta requests HTTP, resuelve variables y corre scripts. |
 | WebSocket runtime | `Sources/AppCore/Application/WebSocketExecutionService.swift` | Prepara handshake, procesa mensajes, scripts `onMessage` y `onDone`. |
@@ -33,7 +33,7 @@ Composition root: `Sources/EfbyPresentation/Composition/AppDependencies.swift`
 
 | Quiero cambiar... | Abrir |
 | --- | --- |
-| La barra superior, sidebar o tabs | `Sources/EFBYPostman/Views/RootView.swift` |
+| La barra superior, sidebar o tabs | `Sources/EFBYPostman/Views/Chrome/`, `Sources/EFBYPostman/Views/Sidebar/`, `Sources/EFBYPostman/Views/Workspace/` |
 | El editor de scripts o utilitarios | `Sources/EFBYPostman/Views/ScriptsTabView.swift`, `Sources/EFBYPostman/Views/WorkspaceUtilityEditor.swift`, `Sources/EFBYPostman/Views/MacCodeEditor.swift` |
 | El editor BPMN de flows | `Sources/EFBYPostman/Views/WorkspaceFlowEditor.swift`, `Sources/EFBYPostman/Views/BPMNFlowWebEditor.swift` |
 | La semantica de variables `{{...}}` | `Sources/AppCore/Application/VariableResolver.swift` |
@@ -41,7 +41,9 @@ Composition root: `Sources/EfbyPresentation/Composition/AppDependencies.swift`
 | El build local, firma y notarizacion | `Tools/build_dmg.sh` |
 | La importacion/exportacion Postman/OpenAPI | `Sources/AppCore/Application/PostmanCollectionCodec.swift`, `Sources/AppCore/Application/PostmanEnvironmentCodec.swift`, `Sources/AppCore/Application/OpenAPIImporter.swift` |
 | Git pull/push/connect | `Sources/AppCore/Application/GitRepositoryService.swift`, `GitSessionCoordinator`, `GitWorkspaceCoordinator` |
-| Tests de una zona concreta | `Tests/AppCoreTests/*` (166 tests) |
+| Tests de una zona concreta | `Tests/AppCoreTests/*` |
+| Pruebas de interfaz macOS | `Tests/UITests/RequestLabUITests.swift`, `Tools/test_ui.sh` |
+| CI y reportes de fallos UI | `.github/workflows/ci.yml`, `Tools/export_ui_test_results.py`, `Tests/ToolTests/test_export_ui_test_results.py` |
 | Documentacion del proyecto | `docs/README.md` |
 | Matriz trazabilidad SDD/TDD | `docs/traceability-matrix.md` |
 | Specs SDD | `SDD/tile/specs/*.spec.md` |
@@ -53,21 +55,30 @@ Composition root: `Sources/EfbyPresentation/Composition/AppDependencies.swift`
 | Referencia | Que hace |
 | --- | --- |
 | `Sources/EFBYPostman/EFBYPostmanApp.swift` | Entry point SwiftUI y app delegate. |
-| `Sources/EFBYPostman/Views/RootView.swift:6` | `RootView`: pantalla base de la aplicacion. |
-| `Sources/EFBYPostman/Views/RootView.swift:271` | `TopChromeBar`: selector de workspace, workdir, Git, pull, push. |
-| `Sources/EFBYPostman/Views/RootView.swift:361` | `SidebarPane`: colecciones, historial, utilitarios, flows, entornos. |
-| `Sources/EFBYPostman/Views/RootView.swift:1460` | `WorkspacePane`: contenedor del request abierto. |
-| `Sources/EFBYPostman/Views/RootView.swift:1480` | `RequestTabsBar`: tabs de requests. |
-| `Sources/EFBYPostman/Views/RootView.swift:1632` | `RequestHeader`: URL, metodo, botones de ejecucion y estado. |
-| `Sources/EFBYPostman/Views/RootView.swift:2951` | `ResponsePane`: cuerpo/console/transcript de respuesta. |
-| `Sources/EFBYPostman/Views/RootView.swift:3673` | `EnvironmentEditor`: editor visual del environment activo. |
-| `Sources/EFBYPostman/Views/RootView.swift:4312` | `EditableVariableList`: renderer reusable para variables editables. |
+| `Sources/EFBYPostman/Views/RootView.swift` | `RootView`: composición de pantalla, estado de presentación y overlays. |
+| `Sources/EFBYPostman/Views/Chrome/TopChromeBar.swift` | Selector de workspace, workdir, Git, pull, push. |
+| `Sources/EFBYPostman/Views/Sidebar/SidebarPane.swift` | Colecciones, historial, utilitarios, flows, entornos. |
+| `Sources/EFBYPostman/Views/Workspace/WorkspacePane.swift` | Contenedor del request abierto. |
+| `Sources/EFBYPostman/Views/Workspace/RequestTabsBar.swift` | Tabs de requests. |
+| `Sources/EFBYPostman/Views/Request/RequestHeader.swift` | URL, metodo, botones de ejecucion y estado. |
+| `Sources/EFBYPostman/Views/Request/RequestEditorView.swift` | Pestañas y contenido del editor de petición. |
+| `Sources/EFBYPostman/Views/Response/ResponsePane.swift` | Cuerpo/console/transcript de respuesta. |
+| `Sources/EFBYPostman/Views/Sheets/EnvironmentEditor.swift` | Editor visual del environment activo. |
+| `Sources/EFBYPostman/Views/Common/EditableVariableList.swift` | Renderer reusable para variables editables. |
+| `Sources/EFBYPostman/Views/Theme/PostmanTheme.swift` | Colores y estilo compartido. |
 
 ### ViewModel y coordinadores
 
 | Referencia | Que hace |
 | --- | --- |
-| `Sources/EfbyPresentation/MainViewModel.swift` | Estado UI; delega en coordinadores. |
+| `Sources/EfbyPresentation/MainViewModel.swift` | Estado observable, dependencias e inicialización. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+Catalog.swift` | Acciones del catálogo de colecciones, flujos y utilitarios. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+Environments.swift` | Entornos y variables. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+Flows.swift` | Ejecución de flujos y sesiones de resultados. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+GitBitbucket.swift` | Git, credenciales e importación Bitbucket. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+RequestsTabs.swift` | Pestañas, edición y ejecución HTTP. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+WebSocket.swift` | Conexiones, mensajes y scripts WebSocket. |
+| `Sources/EfbyPresentation/MainViewModel/MainViewModel+WorkspacePersistence.swift` | Carga, cambio de workspace, importación y persistencia. |
 | `Sources/EfbyPresentation/RequestTabState.swift` | Estado de pestaña de request. |
 | `Sources/EfbyPresentation/Composition/AppDependencies.swift` | Composition root. |
 | `Sources/EfbyPresentation/Coordinators/BitbucketPadCoordinator.swift` | Plan e import Bitbucket (iPad). |
@@ -80,7 +91,7 @@ Composition root: `Sources/EfbyPresentation/Composition/AppDependencies.swift`
 | `Sources/EfbyPresentation/Coordinators/WorkspacePersistenceCoordinator.swift` | Persistencia local + workdir. |
 | `Sources/EfbyPresentation/Coordinators/FlowExecutionCoordinator.swift` | Validación y ejecución BPMN. |
 | `Sources/EfbyPresentation/Coordinators/RequestTabCoordinator.swift` | Ejecución HTTP. |
-| `Sources/EfbyPresentation/Coordinators/RequestTabsCoordinator.swift` | Drafts de pestañas. |
+| `Sources/EfbyPresentation/Coordinators/RequestTabsCoordinator.swift` | Borradores de pestañas y comparación semántica para persistencia. |
 | `Sources/EfbyPresentation/Coordinators/WebSocketExecutionCoordinator.swift` | WebSocket + scripts. |
 | `Sources/EfbyPresentation/Coordinators/DocumentImportCoordinator.swift` | Import/export documentos. |
 
@@ -253,6 +264,7 @@ Orden real del pipeline:
 ```bash
 swift build
 swift test
+./Tools/test_ui.sh
 ./Tools/build_dmg.sh
 ./Tools/build_dmg.sh --sign
 ./Tools/build_dmg.sh --notarize
@@ -263,11 +275,11 @@ swift test
 Usar estas busquedas acota mucho el codigo:
 
 ```bash
-rg -n "persistWorkspace|persistPendingChanges|updateEnvironmentVariables" Sources/AppCore/Presentation/MainViewModel.swift
+rg -n "persistWorkspace|persistPendingChanges|updateEnvironmentVariables" Sources/EfbyPresentation/MainViewModel
 rg -n "prepareConnection|executeIncomingMessageScripts|executeDoneScripts" Sources/AppCore/Application/WebSocketExecutionService.swift
 rg -n "pm.crypto|pm.websocket|pm.request.param|pm.request.headers|pm.request.body" Sources/AppCore/Application/ScriptEngine.swift
 rg -n "saveWorkspaceSnapshot|saveUtilityLibraries|saveFlows|saveEnvironments" Sources/AppCore/Application/SharedCollectionsRepository.swift
-rg -n "ResponsePane|EnvironmentEditor|RequestHeader|WorkspacePane" Sources/EFBYPostman/Views/RootView.swift
+rg -n "ResponsePane|EnvironmentEditor|RequestHeader|WorkspacePane" Sources/EFBYPostman/Views
 ```
 
 ## Maintenance Rule

@@ -1,26 +1,72 @@
 import Foundation
 
-/// Keeps a single security-scoped directory grant alive for macOS sandboxed file access.
+/// Keeps one usable directory URL, balancing security-scoped access when required.
 @MainActor
 struct SecurityScopedDirectoryAccess {
+    struct ResolvedBookmark {
+        var url: URL
+        var isStale: Bool
+    }
+
+    /// The operating system remains the authority for ordinary and scoped access.
+    /// These operations also let tests exercise denial without changing OS permissions.
+    struct Operations {
+        var startAccess: (URL) -> Bool = { $0.startAccessingSecurityScopedResource() }
+        var stopAccess: (URL) -> Void = { $0.stopAccessingSecurityScopedResource() }
+        var validateDirectory: (URL) throws -> Void = { url in
+            guard url.isFileURL else { throw CocoaError(.fileReadUnsupportedScheme) }
+            _ = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+        }
+        var resolveBookmark: (Data, URL.BookmarkResolutionOptions) throws -> ResolvedBookmark = { data, options in
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: data,
+                options: options,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            return ResolvedBookmark(url: url, isStale: isStale)
+        }
+    }
+
+    private let operations: Operations
+    /// Set only after an actual directory read succeeds, with or without a scope.
     private(set) var url: URL?
+    /// Tracks only successful scope acquisitions, not ordinary directory access.
     private(set) var hasActiveAccess = false
 
+    init(operations: Operations = Operations()) {
+        self.operations = operations
+    }
+
     mutating func grantAccess(to url: URL) -> Bool {
-        if self.url?.path == url.path, hasActiveAccess {
-            return true
+        if self.url == url {
+            do {
+                try operations.validateDirectory(url)
+                return true
+            } catch {
+                releaseAccess()
+                return false
+            }
         }
 
         releaseAccess()
-        let granted = url.startAccessingSecurityScopedResource()
+        let acquiredScope = operations.startAccess(url)
+        do {
+            try operations.validateDirectory(url)
+        } catch {
+            if acquiredScope { operations.stopAccess(url) }
+            return false
+        }
+
         self.url = url
-        hasActiveAccess = granted
-        return granted
+        hasActiveAccess = acquiredScope
+        return true
     }
 
     mutating func releaseAccess() {
         if hasActiveAccess, let url {
-            url.stopAccessingSecurityScopedResource()
+            operations.stopAccess(url)
         }
         url = nil
         hasActiveAccess = false
@@ -36,31 +82,30 @@ struct SecurityScopedDirectoryAccess {
         bookmarkData: Data,
         refreshStaleBookmark: (URL) -> Data?
     ) -> RestoreResult? {
-        var isStale = false
-
         do {
+            let resolved: ResolvedBookmark
+            var usedPlainResolution = false
             #if os(macOS)
-            let resolveOptions: URL.BookmarkResolutionOptions = [.withSecurityScope, .withoutUI]
+            do {
+                resolved = try operations.resolveBookmark(bookmarkData, [.withSecurityScope, .withoutUI])
+            } catch {
+                // Older releases may have stored an ordinary bookmark, or its
+                // scoped portion may no longer apply to the updated application.
+                // Resolving a location alone never grants access to that location.
+                resolved = try operations.resolveBookmark(bookmarkData, [.withoutUI])
+                usedPlainResolution = true
+            }
             #else
-            let resolveOptions: URL.BookmarkResolutionOptions = [.withoutUI]
+            resolved = try operations.resolveBookmark(bookmarkData, [.withoutUI])
             #endif
 
-            let resolvedURL = try URL(
-                resolvingBookmarkData: bookmarkData,
-                options: resolveOptions,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
+            guard grantAccess(to: resolved.url) else { return nil }
 
-            guard grantAccess(to: resolvedURL) else {
-                releaseAccess()
-                return nil
-            }
-
-            let refreshedBookmarkData = isStale ? refreshStaleBookmark(resolvedURL) : nil
+            let refreshedBookmarkData = resolved.isStale || usedPlainResolution
+                ? refreshStaleBookmark(resolved.url) : nil
             return RestoreResult(
-                url: resolvedURL,
-                isStale: isStale,
+                url: resolved.url,
+                isStale: resolved.isStale,
                 refreshedBookmarkData: refreshedBookmarkData
             )
         } catch {

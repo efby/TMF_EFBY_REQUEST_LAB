@@ -5,13 +5,13 @@ import Foundation
 /// Coordina el ciclo de vida WebSocket desacoplado del ViewModel principal.
 @MainActor
 public final class WebSocketExecutionCoordinator {
-    private let webSocketService: any WebSocketExecutionServiceProtocol
+    private nonisolated let webSocketService: any WebSocketExecutionServiceProtocol
 
     public init(webSocketService: any WebSocketExecutionServiceProtocol) {
         self.webSocketService = webSocketService
     }
 
-    public func prepareConnection(
+    @concurrent public nonisolated func prepareConnection(
         request: APIRequestModel,
         globals: [VariableValue],
         collectionVariables: [VariableValue],
@@ -19,7 +19,7 @@ public final class WebSocketExecutionCoordinator {
         workspaceEnvironments: [EnvironmentProfile],
         activeEnvironmentID: UUID?,
         utilityLibraries: [WorkspaceScriptUtility]
-    ) throws -> WebSocketPreparationOutcome {
+    ) async throws -> WebSocketPreparationOutcome {
         try webSocketService.prepareConnection(
             request: request,
             globals: globals,
@@ -38,14 +38,14 @@ public final class WebSocketExecutionCoordinator {
         try await webSocketService.connect(prepared: prepared, request: request)
     }
 
-    public func resolveOutgoingMessage(
+    @concurrent public nonisolated func resolveOutgoingMessage(
         from request: APIRequestModel,
         globals: [VariableValue],
         collectionVariables: [VariableValue],
         environmentVariables: [VariableValue],
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> String {
-        webSocketService.resolveOutgoingMessage(
+    ) async throws -> String {
+        try webSocketService.resolveOutgoingMessage(
             from: request,
             globals: globals,
             collectionVariables: collectionVariables,
@@ -62,8 +62,8 @@ public final class WebSocketExecutionCoordinator {
         localVariables: [KeyValueEntry],
         request: APIRequestModel?,
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> String {
-        webSocketService.resolve(
+    ) throws -> String {
+        try webSocketService.resolve(
             text,
             globals: globals,
             collectionVariables: collectionVariables,
@@ -74,7 +74,27 @@ public final class WebSocketExecutionCoordinator {
         )
     }
 
-    public func executeIncomingMessageScripts(
+    @concurrent public nonisolated func resolveAsync(
+        _ text: String,
+        globals: [VariableValue],
+        collectionVariables: [VariableValue],
+        environmentVariables: [VariableValue],
+        localVariables: [KeyValueEntry],
+        request: APIRequestModel?,
+        utilityLibraries: [WorkspaceScriptUtility]
+    ) async throws -> String {
+        try webSocketService.resolve(
+            text,
+            globals: globals,
+            collectionVariables: collectionVariables,
+            environmentVariables: environmentVariables,
+            localVariables: localVariables,
+            request: request,
+            utilityLibraries: utilityLibraries
+        )
+    }
+
+    @concurrent public nonisolated func executeIncomingMessageScripts(
         message: String,
         request: APIRequestModel,
         globals: [VariableValue],
@@ -83,7 +103,7 @@ public final class WebSocketExecutionCoordinator {
         workspaceEnvironments: [EnvironmentProfile],
         activeEnvironmentID: UUID?,
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> WebSocketMessageScriptOutcome {
+    ) async -> WebSocketMessageScriptOutcome {
         webSocketService.executeIncomingMessageScripts(
             message: message,
             request: request,
@@ -96,7 +116,7 @@ public final class WebSocketExecutionCoordinator {
         )
     }
 
-    public func executeDoneScripts(
+    @concurrent public nonisolated func executeDoneScripts(
         cause: String,
         request: APIRequestModel,
         globals: [VariableValue],
@@ -105,7 +125,7 @@ public final class WebSocketExecutionCoordinator {
         workspaceEnvironments: [EnvironmentProfile],
         activeEnvironmentID: UUID?,
         utilityLibraries: [WorkspaceScriptUtility]
-    ) -> WebSocketMessageScriptOutcome {
+    ) async -> WebSocketMessageScriptOutcome {
         webSocketService.executeDoneScripts(
             cause: cause,
             request: request,
