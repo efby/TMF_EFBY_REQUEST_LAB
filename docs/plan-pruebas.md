@@ -128,6 +128,7 @@ Workflow `.github/workflows/ci.yml`:
 - Usa `macos-26`, prefiere Xcode 26.6 y comprueba que Swift sea compatible con tools 6.3. La [imagen alojada](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md) dispone de una sesión gráfica para XCTest UI.
 - Mantiene el job `test-and-package`: verifica el exportador, resuelve dependencias, ejecuta `swift test` y la suite UI, publica el resumen y guarda artefactos. El DMG de este workflow solo se construye si todas las comprobaciones terminan correctamente.
 - UI sigue ejecutándose si falla la suite del núcleo y las dependencias se resolvieron. Las pruebas conservan su código de salida; no se usa `continue-on-error`. La ejecución UI es secuencial, con límites de 120 segundos por caso y un máximo de 180; cada suite tiene un límite de paso de 15 minutos.
+- Antes de ejecutar UI, `Tools/configure_ui_test_display.swift` comprueba una pantalla de al menos 1440×900 puntos y selecciona un modo compatible, preferentemente 1920×1080, si hace falta. Si CoreGraphics no puede configurarlo, intenta las utilidades Anka/VMware preinstaladas, cuando existen, y verifica el tamaño efectivo. Solo permite cambiar la resolución en GitHub Actions; `--check-only` y `--self-test` no modifican pantallas. Si no se consigue una resolución válida, falla la preparación y se omite la suite UI, conservando el diagnóstico.
 - La exportación y subida de resultados se ejecutan también tras un fallo. El artefacto `EFBYRequestLab-test-results-<run_id>-<run_attempt>` se conserva 14 días y contiene únicamente `.build/ci-results/`.
 
 Contenido del artefacto:
@@ -137,6 +138,7 @@ Contenido del artefacto:
 | `toolchain.log` | Versión de macOS, Xcode y Swift usada |
 | `core/tests.log`, `core/exit-code.txt` | Salida completa y estado de `swift test`, incluidos los casos omitidos |
 | `ui/tests.log`, `ui/exit-code.txt` | Compilación, ejecución de interfaz y código de salida |
+| `ui/display.log`, `ui/display-selection-tests.log` | Modos de pantalla disponibles, resolución efectiva y verificación de selección de modo |
 | `ui/Results.xcresult` | Resultado original para abrir en Xcode |
 | `ui/report/summary.md`, `summary.json`, `tests.json` | Resumen legible, recuentos y resultados por caso |
 | `ui/report/junit.xml` | Reporte JUnit de la suite UI |

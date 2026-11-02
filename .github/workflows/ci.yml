@@ -68,9 +68,17 @@ jobs:
           printf '%s\n' "$test_status" > .build/ci-results/core/exit-code.txt
           exit "$test_status"
 
+      - name: Configure UI test display
+        id: display
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
+        timeout-minutes: 2
+        run: |
+          xcrun swift Tools/configure_ui_test_display.swift --self-test 2>&1 | tee .build/ci-results/ui/display-selection-tests.log
+          xcrun swift Tools/configure_ui_test_display.swift 2>&1 | tee .build/ci-results/ui/display.log
+
       - name: Run macOS UI tests
         id: ui
-        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' && steps.display.outcome == 'success' }}
         timeout-minutes: 15
         run: |
           set +e
@@ -101,12 +109,14 @@ jobs:
         env:
           CORE_OUTCOME: ${{ steps.core.outcome }}
           UI_OUTCOME: ${{ steps.ui.outcome }}
+          DISPLAY_OUTCOME: ${{ steps.display.outcome }}
         run: |
           {
             echo '## Test results'
             echo
             printf '| Suite | Result |\n| --- | --- |\n'
             printf '| Core | %s |\n' "${CORE_OUTCOME:-not run}"
+            printf '| UI display | %s |\n' "${DISPLAY_OUTCOME:-not run}"
             printf '| macOS UI | %s |\n' "${UI_OUTCOME:-not run}"
             echo
             if [[ -f .build/ci-results/ui/report/summary.md ]]; then

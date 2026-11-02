@@ -14,7 +14,7 @@
 - Agrupa el autoguardado, evita escrituras idénticas y reutiliza sesiones HTTP compatibles.
 - Separa MainViewModel y RootView en archivos por responsabilidad.
 - Añade pruebas de interfaz para navegación, pestañas, workspaces, reapertura, envío y cancelación.
-- Integra las pruebas de interfaz en CI y conserva reportes, capturas y resultados de Xcode ante fallos.
+- Integra las pruebas de interfaz en CI, prepara una resolución de pantalla suficiente y conserva reportes, capturas y resultados de Xcode ante fallos.
 
 ### Validación
 
